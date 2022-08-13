@@ -24,6 +24,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, asyn
 
     entities = []
 
+    # Meter sensors (Energy & Power)
     for meter in cache[COMMAND_METER]:
         entities.append(
             OneSmartSensor(
@@ -59,6 +60,25 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, asyn
             )
         )
 
+    # Site sensors
+    entities.append(
+        OneSmartSensor(
+            hass,
+            config_entry,
+            wrapper,
+            ONESMART_UPDATE_POLL,
+            "mode",
+            "System Mode",
+            "",
+            COMMAND_SITE,
+            None,
+            "mdi:home-account",
+            None,
+            None
+        )
+    )
+
+
     async_add_entities(entities)
     
 class OneSmartSensor(OneSmartEntity, SensorEntity):
@@ -68,7 +88,7 @@ class OneSmartSensor(OneSmartEntity, SensorEntity):
         config_entry,
         wrapper: OneSmartWrapper,
         update_topic,
-        id,
+        key,
         name,
         suffix,
         source,
@@ -79,7 +99,7 @@ class OneSmartSensor(OneSmartEntity, SensorEntity):
     ):
         super().__init__(hass, config_entry, wrapper, update_topic)
         self.wrapper = wrapper
-        self._id = id
+        self._key = key
         self._nodeid = self.cache[COMMAND_SITE][SITE_NODEID]
         self._name = name
         self._suffix = suffix
@@ -91,15 +111,15 @@ class OneSmartSensor(OneSmartEntity, SensorEntity):
 
     @property
     def state(self):
-        return self.cache[self._source][self._id]
+        return self.cache[self._source][self._key]
 
     @property
     def available(self) -> bool:
         if not self._source in self.cache:
             return False
-        if not self._id in self.cache[self._source]:
+        if not self._key in self.cache[self._source]:
             return False
-        return self.cache[self._source][self._id] is not None
+        return self.cache[self._source][self._key] is not None
 
     @property
     def unit_of_measurement(self):
@@ -119,8 +139,15 @@ class OneSmartSensor(OneSmartEntity, SensorEntity):
 
     @property
     def name(self):
-        return "{} {}".format(self._name, self._suffix.title())
+        if self._suffix != None:
+            return f"{self._name} {self._suffix.title()}"
+        else:
+            return self._name
 
     @property
     def unique_id(self):
-        return f"{DOMAIN}-{self._nodeid}-{self._id}-{self._suffix}"
+        if self._suffix != None:
+            return f"{DOMAIN}-{self._nodeid}-{self._key}-{self._suffix}"
+        else:
+            return f"{DOMAIN}-{self._nodeid}-{self._key}"
+
