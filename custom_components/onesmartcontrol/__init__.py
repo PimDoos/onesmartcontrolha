@@ -59,7 +59,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         raise ConfigEntryNotReady
     
     # Subscribe to energy events
-    await hass.data[DOMAIN][ONESMART_WRAPPER].subscribe(topics=[TOPIC_ENERGY])
+    await hass.data[DOMAIN][ONESMART_WRAPPER].subscribe(topics=[TOPIC_ENERGY, TOPIC_SITE])
 
     # Start the background runner
     task = asyncio.create_task(
@@ -98,6 +98,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.data[DOMAIN].pop(entry.entry_id)
         
         hass.data[DOMAIN][ONESMART_RUNNER].cancel()
+        hass.data[DOMAIN][INTERVAL_TRACKER_DEFINITIONS]
         hass.data[DOMAIN][ONESMART_WRAPPER].close()
 
     return unload_ok
