@@ -9,3 +9,8 @@ Setup via HACS
 2. Setup the integration via the config flow 
 
 [![](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=onesmartcontrol)
+
+Supported functionality
+-----------------------
+- Energy sensors: Realtime power consumption (W)
+- Energy sensors: Cumulative energy consumption (kWh)
