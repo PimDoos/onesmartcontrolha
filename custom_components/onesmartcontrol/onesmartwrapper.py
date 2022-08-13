@@ -92,11 +92,11 @@ class OneSmartWrapper():
         transaction_id = await self.hass.async_add_executor_job(
             partial(self.socket.send_cmd, command, **kwargs)
         )
-        print("{} SEND {}".format(transaction_id, (command, kwargs)))
+        # print("{} SEND {}".format(transaction_id, (command, kwargs)))
         # Wait for transaction to return
         transaction_done = False
         while not transaction_done:
-            print("{} WAIT".format(transaction_id))
+            # print("{} WAIT".format(transaction_id))
             await self.hass.async_add_executor_job(
                 self.socket.get_responses
             )
@@ -106,7 +106,7 @@ class OneSmartWrapper():
             )
             transaction_done = transaction != None
         
-        print("{} DONE".format(transaction_id))
+        # print("{} DONE".format(transaction_id))
         return transaction
 
     """Subscribe the socket to the specified event topics"""
@@ -116,10 +116,10 @@ class OneSmartWrapper():
     """Update id-name mappings"""
     async def update_definitions(self):
         self.set_update_flag(COMMAND_METER)
-        self.set_update_flag(COMMAND_SITE)
         
     """Update polling cache"""
     async def update_cache(self):
+        self.set_update_flag(COMMAND_SITE)
         self.set_update_flag(COMMAND_ENERGY)
 
     def set_update_flag(self, flag):
