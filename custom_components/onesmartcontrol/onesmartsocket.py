@@ -1,5 +1,4 @@
 """One Smart Control JSON-RPC Socket implementation"""
-from errno import EWOULDBLOCK
 from hashlib import sha1
 import json
 from random import randint
@@ -65,17 +64,16 @@ class OneSmartSocket:
         data_available = select([self._ssl_socket],[],[], SOCKET_RECEIVE_TIMEOUT)
         self._ssl_socket.setblocking(True)
         if data_available[0]:
-            print("Socket: Data available")
-            rpc_reply = self._ssl_socket.recv(SOCKET_BUFFER_SIZE)
 
-            # One Smart splits messages over 1024 bytes. Sow them back together
-            if(len(rpc_reply) == SOCKET_BUFFER_SIZE):
+            rpc_reply = bytes()
+        
+            # Stitch split packages
+            while len(rpc_reply) % SOCKET_BUFFER_SIZE == 0:
                 rpc_reply += self._ssl_socket.recv(SOCKET_BUFFER_SIZE)
             
             reply = rpc_reply.decode()
             if(len(reply) > 8):
                 reply_data = json.loads(reply)
-                print(reply_data)
                 if not reply_data == None:
                     if RPC_TRANSACTION in reply_data:
                         # Received message is a transaction response
@@ -85,8 +83,6 @@ class OneSmartSocket:
                     else:
                         # Message is not part of a transaction. Add to eventqueue.
                         self._event_cache.append(reply_data)
-        else:
-            print("Socket: No data available")
 
     """Get the result of a cached transaction"""
     def get_transaction(self, transaction_id):
