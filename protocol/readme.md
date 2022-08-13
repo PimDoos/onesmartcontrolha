@@ -43,6 +43,7 @@ When a command cannot complete, the server replies to the transaction with a err
 
 
 |Code|Description|Explanation|
+|----|-----------|-----------|
 |1|Parse error|The command could not be parsed|
 |10|User not authenticated|The user has not yet issued a `authenticate` command with valid credentials|
 |12|Wrong password|The user has supplied invalid credentials in the `authenticate` command|
@@ -78,6 +79,7 @@ Commands
 
 **Action domains**
 |Action|Description|
+|------|-----------|
 |add|Add an object|
 |check||
 |delete|Remove an object|
@@ -123,6 +125,19 @@ Commands
 |upgrade|check||Check for upgrades|
 |upgrade|perform|id|Perform the selected upgrade|
 
+Events
+------
+|Topic|Event|Description|
+|-----|-----|-----------|
+|ENERGY|energy_consumption|Reports meter power readings|
+|SITE|site_update|Called when site values are updated. Contains most of the `site` command data.|
+|USER|user_update|Called when a user is edited|
+|TRIGGER|trigger_perform|Called when a trigger is executed|
+|TRIGGER|trigger_delete|Called when a trigger is deleted|
+|PRESET|preset_perform|Called when a preset is activated|
+|PRESET|preset_stop|Called when a preset is deactivated|
+|PRESETGROUP|presetgroup_perform|Called when a presetgroup (scene) is activated|
+|SITEPRESET|sitepreset_perform|Called when a sitepreset is activated|
 
 Portal Gateway
 --------------
