@@ -2,6 +2,7 @@
 Home Assistant integration for One Smart Control server
 
 Uses local push via JSON-RPC over TLS on port 9010. Thanks to [tbone789](https://tweakers.net/gallery/532104/) on Tweakers for helping reverse engineer the protocol.
+Read more about the protocol [here](https://github.com/PimDoos/onesmartcontrolha/tree/main/protocol).
 
 Setup via HACS
 -----
