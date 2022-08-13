@@ -115,11 +115,12 @@ class OneSmartWrapper():
 
     """Update id-name mappings"""
     async def update_definitions(self):
+        self.set_update_flag(COMMAND_SITE)
         self.set_update_flag(COMMAND_METER)
+
         
     """Update polling cache"""
     async def update_cache(self):
-        self.set_update_flag(COMMAND_SITE)
         self.set_update_flag(COMMAND_ENERGY)
 
     def set_update_flag(self, flag):
@@ -135,6 +136,8 @@ class OneSmartWrapper():
                 # Fill cache with RPC result
                 transaction = await self.command(command=flag, action=ACTION_GET)
                 self.cache[flag] = transaction[RPC_RESULT]
+                if flag == COMMAND_SITE:
+                    self.cache[EVENT_SITE_UPDATE] = transaction[RPC_RESULT]
 
                 if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
                     dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
@@ -180,6 +183,9 @@ class OneSmartWrapper():
                 for reading in event[RPC_DATA][RPC_VALUES]:
                     meter_value = reading["value"]
                     self.cache[EVENT_ENERGY_CONSUMPTION][reading["id"]] = meter_value
+            if event[RPC_EVENT] == EVENT_SITE_UPDATE:
+                self.cache[EVENT_SITE_UPDATE] = event[RPC_DATA]
+
         async_dispatcher_send(self.hass, ONESMART_UPDATE_PUSH)
                     
     @property
