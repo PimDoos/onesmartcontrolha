@@ -129,15 +129,34 @@ Events
 ------
 |Topic|Event|Description|
 |-----|-----|-----------|
+|DEVICE|device_input||
+|DEVICE|device_data||
+|DEVICE|device_status||
+|DEVICE|discovery_device_discovered||
+|DEVICE|discovery_device_registered||
+|DEVICE|discovery_device_register_failed||
 |ENERGY|energy_consumption|Reports meter power readings|
-|SITE|site_update|Called when site values are updated. Contains most of the `site` command data.|
-|USER|user_update|Called when a user is edited|
-|TRIGGER|trigger_perform|Called when a trigger is executed|
-|TRIGGER|trigger_delete|Called when a trigger is deleted|
+|METER|meter_create|Called when a new meter is created|
+|METER|meter_update|Called when meter parameters are changed|
+|METER|meter_delete|Called when a meter is deleted|
 |PRESET|preset_perform|Called when a preset is activated|
 |PRESET|preset_stop|Called when a preset is deactivated|
+|PRESET|preset_delete|Called when a preset is deleted|
 |PRESETGROUP|presetgroup_perform|Called when a presetgroup (scene) is activated|
+|ROLE|role_create||
+|ROLE|role_update||
+|ROLE|role_delete||
+|ROOM|room_create||
+|ROOM|room_update||
+|ROOM|room_delete||
+|SITE|site_update|Called when site values are updated. Contains most of the `site` command data.|
 |SITEPRESET|sitepreset_perform|Called when a sitepreset is activated|
+|TRIGGER|trigger_create|Called when a new trigger is created|
+|TRIGGER|trigger_perform|Called when a trigger is executed|
+|TRIGGER|trigger_delete|Called when a trigger is deleted|
+|UPGRADE|upgrade_available|Called when a software upgrade is available|
+|USER|user_update|Called when a user is edited|
+
 
 Portal Gateway
 --------------
