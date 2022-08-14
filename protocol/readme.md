@@ -100,8 +100,9 @@ Commands
 **Command specification**
 |Command|Action|Extra fields|Description|
 |-------|------|------------|-----------|
-|apparatus|get|?|Unknown|
-|apparatus|list|?|Unknown|
+|apparatus|get|id (device id), attributes (array of attribute names)|Returns the value of an attribute|
+|apparatus|set|id (device id), attributes (dict?)|Set the value of a given attribute|
+|apparatus|list|Device ID: `id`|List available device attributes for a given device ID|
 |energy|total||Return total values for all meter objects|
 |gettoken|get||Returns a Bearer token for portal gateway functions|
 |room|list||List all rooms|
@@ -129,6 +130,7 @@ Events
 ------
 |Topic|Event|Description|
 |-----|-----|-----------|
+|APPARATUS|||
 |DEVICE|device_input||
 |DEVICE|device_data||
 |DEVICE|device_status||
