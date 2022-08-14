@@ -45,6 +45,7 @@ When a command cannot complete, the server replies to the transaction with a err
 |Code|Description|Explanation|
 |----|-----------|-----------|
 |1|Parse error|The command could not be parsed|
+|3|Timeout|The command did not complete in time|
 |10|User not authenticated|The user has not yet issued a `authenticate` command with valid credentials|
 |12|Wrong password|The user has supplied invalid credentials in the `authenticate` command|
 |100|No such command|The command domain (cmd) does not exist|
