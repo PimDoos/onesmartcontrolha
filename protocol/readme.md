@@ -176,3 +176,4 @@ With this token and site-id, the client can connect to these endpoints:
 |----|---|
 |Energy|https://portal.onesmartcontrol.com/gateways/{siteid}/|
 |Comfort|https://portal.onesmartcontrol.com/gateways/{siteid}/comfort|
+|Check comfort features|https://portal.onesmartcontrol.com/gateways/{siteid}/has_parameter?name=room_temperature_zone1|
