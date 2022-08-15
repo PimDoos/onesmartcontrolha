@@ -59,7 +59,7 @@ Commands
 **Command domains**
 |Command|Actions|Description|
 |-------|-------|-----------|
-|apparatus|?|
+|apparatus|?||
 |authenticate||Authentication|
 |device|get list|Connected devices|
 |energy|total|Energy and power|
@@ -76,6 +76,7 @@ Commands
 |user|get list|User accounts|
 |upgrade|check perform|Software updates|
 |sitepreset||Site preset triggers|
+|shell|?|?|
 |trigger|get|Trigger links|
 
 **Action domains**
