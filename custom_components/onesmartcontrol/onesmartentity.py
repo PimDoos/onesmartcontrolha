@@ -39,7 +39,7 @@ class OneSmartEntity(Entity):
 
     @property
     def device_info(self):
-        site = self.cache[COMMAND_SITE]
+        site = self.cache[(COMMAND_SITE,ACTION_GET)]
         return {
             ATTR_IDENTIFIERS: {(DOMAIN, site[SITE_MAC]), (DOMAIN, site[SITE_NODEID])},
             ATTR_DEFAULT_NAME: site[RPC_NAME],

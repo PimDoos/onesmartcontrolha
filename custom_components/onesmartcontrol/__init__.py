@@ -46,20 +46,26 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
     # Set update flags
     await hass.data[DOMAIN][ONESMART_WRAPPER].update_definitions()
-    await hass.data[DOMAIN][ONESMART_WRAPPER].update_cache()
+    
 
     # Wait for incoming data
     await hass.data[DOMAIN][ONESMART_WRAPPER].handle_update_flags()
 
     # Check cache
     cache = hass.data[DOMAIN][ONESMART_WRAPPER].get_cache()
-    if len(cache[COMMAND_METER]) == 0:
+
+    if len(cache[(COMMAND_METER,ACTION_LIST)]) == 0:
         raise ConfigEntryNotReady
-    elif len(cache[COMMAND_SITE]) == 0:
+    elif len(cache[(COMMAND_SITE,ACTION_GET)]) == 0:
+        raise ConfigEntryNotReady
+    elif len(cache[(COMMAND_DEVICE,ACTION_LIST)]) == 0:
         raise ConfigEntryNotReady
     
     # Subscribe to energy events
     await hass.data[DOMAIN][ONESMART_WRAPPER].subscribe(topics=[TOPIC_ENERGY, TOPIC_SITE])
+
+    # Fetch initial polling data
+    await hass.data[DOMAIN][ONESMART_WRAPPER].update_cache()
 
     # Start the background runner
     task = asyncio.create_task(
@@ -88,6 +94,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
             hass.config_entries.async_forward_entry_setup(config_entry, platform)
         )
     
+    print("One Smart Control is done with startup!")
     return True
 
 
@@ -98,7 +105,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.data[DOMAIN].pop(entry.entry_id)
         
         hass.data[DOMAIN][ONESMART_RUNNER].cancel()
-        hass.data[DOMAIN][INTERVAL_TRACKER_DEFINITIONS]
-        hass.data[DOMAIN][ONESMART_WRAPPER].close()
+        hass.data[DOMAIN][INTERVAL_TRACKER_DEFINITIONS].cancel()
+        hass.data[DOMAIN][INTERVAL_TRACKER_POLL].cancel()
+        await hass.data[DOMAIN][ONESMART_WRAPPER].close()
 
     return unload_ok
