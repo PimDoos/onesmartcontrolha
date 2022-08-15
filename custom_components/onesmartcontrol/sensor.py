@@ -111,7 +111,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, asyn
                         hass,
                         config_entry,
                         wrapper,
-                        ONESMART_UPDATE_POLL,
+                        ONESMART_UPDATE_APPARATUS,
                         f"{device_id}.{attribute_name}",
                         f"{device_name} {attribute_name.replace('_',' ').title()}",
                         None,

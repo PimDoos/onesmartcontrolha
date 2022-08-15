@@ -3,6 +3,7 @@
 import asyncio
 from logging import error, warning
 from re import match
+import struct
 from homeassistant.core import HomeAssistant, CoreState
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from functools import partial
@@ -45,6 +46,8 @@ class OneSmartWrapper():
         self.cache[(COMMAND_APPARATUS,ACTION_GET)] = dict()
 
         self.update_flags = []
+
+        self.last_apparatus_index = dict()
         self.device_apparatus_attributes = dict()
     
     async def connect(self):
@@ -79,43 +82,40 @@ class OneSmartWrapper():
 
         # Loop through received data, blocked by socket.read
         while self.hass.state == CoreState.not_running or self.hass.is_running:
-            
-            # Make sure socket is connected. Reconnect if neccessary
-            if not self.socket.is_connected():
-                await self.connect()
-
-            # Keep the connection alive
-            if time() - last_ping > PING_INTERVAL:
-                ping_result = None
-                ping_result = await self.command(COMMAND_PING)
-
-                if ping_result == None:
-                    # Ping timed out, reconnect
-                    warning(f"{ INTEGRATION_TITLE } ping to server timed out. Reconnecting.")
+            try:
+                # Make sure socket is connected. Reconnect if neccessary
+                if not self.socket.is_connected():
                     await self.connect()
-                last_ping = time()
 
-            # Read data from the socket
-            await self.hass.async_add_executor_job(
-                self.socket.get_responses
-            )
+                # Keep the connection alive
+                if time() - last_ping > PING_INTERVAL:
+                    ping_result = None
+                    ping_result = await self.command(COMMAND_PING)
 
-            tasks = []
-            # Handle events (push updates)
-            tasks.append(
-                self.hass.async_create_task(
-                    self.handle_events()
+                    if ping_result == None:
+                        # Ping timed out, reconnect
+                        warning(f"Ping to server timed out. Reconnecting.")
+                        await self.connect()
+                    last_ping = time()
+
+                # Read data from the socket
+                await self.hass.async_add_executor_job(
+                    self.socket.get_responses
                 )
-            )
 
-            # Handle polling updates
-            tasks.append(
-                self.hass.async_create_task(
-                    self.handle_update_flags()
-                )
-            )
+                tasks = []
+                # Handle events (push updates)
+                await self.handle_events()
+                
+                # Update caches
+                await self.handle_update_flags()
 
-            await asyncio.gather(*tasks)
+                # Update apparatus attributes
+                await self.poll_apparatus()
+
+            except Exception as e:
+                error(f"Error in gateway wrapper: { e }")
+
 
     async def close(self):
         await self.hass.async_add_executor_job(
@@ -133,7 +133,7 @@ class OneSmartWrapper():
         start_time = time()
         while not transaction_done:
             if time() - start_time > SOCKET_COMMAND_TIMEOUT:
-                warning(f"{INTEGRATION_TITLE} command timed out after {SOCKET_COMMAND_TIMEOUT} seconds")
+                warning(f"Command timed out after {SOCKET_COMMAND_TIMEOUT} seconds: { command }")
                 return None
             # print("{} WAIT".format(transaction_id))
             await self.hass.async_add_executor_job(
@@ -161,7 +161,6 @@ class OneSmartWrapper():
     """Update polling cache"""
     async def update_cache(self):
         self.set_update_flag((COMMAND_ENERGY,ACTION_TOTAL))
-        self.set_update_flag((COMMAND_APPARATUS,ACTION_GET))
 
     def set_update_flag(self, flag):
         self.update_flags.append(flag)
@@ -218,35 +217,59 @@ class OneSmartWrapper():
                             id=device_id
                         )
                         self.cache[flag] = transaction[RPC_RESULT][RPC_ATTRIBUTES]
-
-                elif flag_action == ACTION_GET:
-                    # Update apparatus values
-                    for device_id in self.device_apparatus_attributes:
-                        attributes = self.device_apparatus_attributes[device_id]
-                        attribute_names = [attribute_name for attribute_name in attributes]
-                        transaction = await self.command(
-                            command=flag_command, action=flag_action, 
-                            id=device_id, attributes=attribute_names
-                        )
-                        if RPC_ERROR in transaction[RPC_RESULT]:
-                            devices = self.cache[(COMMAND_DEVICE,ACTION_LIST)]
-                            device = devices[device_id]
-                            device = device[0]
-                            device_name = device[RPC_NAME]
-                            warning(f"{INTEGRATION_TITLE} could not setup {device_name}: {transaction[RPC_RESULT]}")
-                        else:
-                            self.cache[flag][device_id] = transaction[RPC_RESULT][RPC_ATTRIBUTES]
-                    if not ONESMART_UPDATE_POLL in dispatcher_topics:
-                        dispatcher_topics.append(ONESMART_UPDATE_POLL)
-
-                    
-
-                
+     
         self.update_flags = []        
         
         # Send dispatcher event to update bound entities
         for topic in dispatcher_topics:
             async_dispatcher_send(self.hass, topic)
+        
+    async def poll_apparatus(self):
+         # Update apparatus values
+        for device_id in self.device_apparatus_attributes:
+            attributes = self.device_apparatus_attributes[device_id]
+            attribute_names = [attribute_name for attribute_name in attributes]
+
+            # Only poll MAX_APPARATUS_POLL per cycle
+            if not device_id in self.last_apparatus_index:
+                attribute_index = 0
+            else:
+                attribute_index = self.last_apparatus_index[device_id] + 1
+                if attribute_index >= len(attribute_names):
+                    attribute_index = 0
+            
+            end_index = attribute_index + MAX_APPARATUS_POLL
+            if end_index >= len(attribute_names):
+                split_attributes = attribute_names[attribute_index:]
+            else:
+                split_attributes = attribute_names[attribute_index:end_index+1]
+
+            self.last_apparatus_index[device_id] = end_index
+
+            transaction = await self.command(
+                command=COMMAND_APPARATUS, action=ACTION_GET, 
+                id=device_id, attributes=split_attributes
+            )
+            if RPC_ERROR in transaction[RPC_RESULT]:
+                devices = self.cache[(COMMAND_DEVICE,ACTION_LIST)]
+                device = devices[device_id]
+                device_name = device[RPC_NAME]
+                warning(f"Could not load data for {device_name}: {transaction[RPC_RESULT]}")
+            else:
+                values_new = transaction[RPC_RESULT][RPC_ATTRIBUTES]
+                for value_name in values_new:
+                    value = values_new[value_name]
+                    if isinstance(value, int):
+                        if value.bit_length() == BIT_LENGTH_DOUBLE:
+                            values_new[value_name] = struct.unpack("<d",value.to_bytes(8,byteorder="little"))
+
+                if device_id in self.cache[(COMMAND_APPARATUS,ACTION_GET)]:
+                    values_cache = self.cache[(COMMAND_APPARATUS,ACTION_GET)][device_id]
+                else:
+                    values_cache = {}
+                self.cache[(COMMAND_APPARATUS,ACTION_GET)][device_id] = values_cache | values_new
+            
+        async_dispatcher_send(self.hass, ONESMART_UPDATE_APPARATUS)
 
     def get_cache(self, cache_name = None):
         if cache_name == None:
@@ -279,44 +302,48 @@ class OneSmartWrapper():
             attributes = transaction[RPC_RESULT][RPC_ATTRIBUTES]
 
             for attribute in attributes:
-                if attribute[RPC_ACCESS] == ACCESS_READ and attribute[RPC_TYPE] in [TYPE_NUMBER, TYPE_REAL]:
+                if attribute[RPC_ACCESS] == ACCESS_READ:
                     attribute[CONF_PLATFORM] = Platform.SENSOR
-                    attribute[ATTR_STATE_CLASS] = STATE_CLASS_MEASUREMENT
-                    # Temperature sensors
-                    if "_temp" in attribute[RPC_NAME]:
-                        attribute[ATTR_UNIT_OF_MEASUREMENT] = TEMP_CELSIUS
-                        attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_TEMPERATURE
-                        self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                    if attribute[RPC_TYPE] in [TYPE_NUMBER, TYPE_REAL]:
+                        attribute[ATTR_STATE_CLASS] = STATE_CLASS_MEASUREMENT
+                        # Temperature sensors
+                        if "_temp" in attribute[RPC_NAME]:
+                            attribute[ATTR_UNIT_OF_MEASUREMENT] = TEMP_CELSIUS
+                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_TEMPERATURE
+                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
 
-                    elif "_percent" in attribute[RPC_NAME]:
-                        attribute[ATTR_UNIT_OF_MEASUREMENT] = PERCENTAGE
-                        self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                        elif "_percent" in attribute[RPC_NAME]:
+                            attribute[ATTR_UNIT_OF_MEASUREMENT] = PERCENTAGE
+                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
 
-                    elif "co2_level" in attribute[RPC_NAME]:
-                        attribute[ATTR_UNIT_OF_MEASUREMENT] = CONCENTRATION_PARTS_PER_MILLION
-                        attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_CO2
-                        self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                    
-                    # elif "_power" in attribute[RPC_NAME]:
-                    #     attribute[ATTR_UNIT_OF_MEASUREMENT] = POWER_WATT
-                    #     if "reactive" in attribute[RPC_NAME]:
-                    #         attribute[ATTR_UNIT_OF_MEASUREMENT] = POWER_VOLT_AMPERE_REACTIVE
-                    #     attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_POWER
-                    #     self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                        elif "co2_level" in attribute[RPC_NAME]:
+                            attribute[ATTR_UNIT_OF_MEASUREMENT] = CONCENTRATION_PARTS_PER_MILLION
+                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_CO2
+                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                        
+                        #This returns weird numbers on HUAWEI SUN2000
+                        elif "_power" in attribute[RPC_NAME]:
+                            attribute[ATTR_UNIT_OF_MEASUREMENT] = POWER_WATT
+                            if "reactive" in attribute[RPC_NAME]:
+                                attribute[ATTR_UNIT_OF_MEASUREMENT] = POWER_VOLT_AMPERE_REACTIVE
+                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_POWER
+                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
 
-                    elif "current" in attribute[RPC_NAME]:
-                        attribute[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_CURRENT_AMPERE
-                        attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_CURRENT
-                        self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                    
-                    elif "voltage" in attribute[RPC_NAME]:
-                        attribute[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_POTENTIAL_VOLT
-                        attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_VOLTAGE
-                        self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                    
-                    elif "frequency" in attribute[RPC_NAME]:
-                        attribute[ATTR_UNIT_OF_MEASUREMENT] = FREQUENCY_HERTZ
-                        attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_FREQUENCY
+                        elif "current" in attribute[RPC_NAME]:
+                            attribute[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_CURRENT_AMPERE
+                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_CURRENT
+                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                        
+                        elif "voltage" in attribute[RPC_NAME]:
+                            attribute[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_POTENTIAL_VOLT
+                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_VOLTAGE
+                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                        
+                        elif "frequency" in attribute[RPC_NAME]:
+                            attribute[ATTR_UNIT_OF_MEASUREMENT] = FREQUENCY_HERTZ
+                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_FREQUENCY
+                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                    elif attribute[RPC_TYPE] in [TYPE_STRING]:
                         self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
     
     def get_apparatus_attributes(self, device_id = None):
@@ -328,6 +355,9 @@ class OneSmartWrapper():
         else:
             return self.device_apparatus_attributes
 
+    def split_list(self, lst, n):  
+        for i in range(0, len(lst), n): 
+            yield lst[i:i + n]
 
     @property
     def is_connected(self):

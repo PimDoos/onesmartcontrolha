@@ -66,12 +66,14 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
     # Fetch initial polling data
     await hass.data[DOMAIN][ONESMART_WRAPPER].update_cache()
+    await hass.data[DOMAIN][ONESMART_WRAPPER].poll_apparatus()
 
-    # Start the background runner
-    task = asyncio.create_task(
+    # await hass.data[DOMAIN][ONESMART_WRAPPER].run()
+    # Start the background runners
+    hass.data[DOMAIN][ONESMART_RUNNER] = asyncio.create_task(
         hass.data[DOMAIN][ONESMART_WRAPPER].run()
     )
-    hass.data[DOMAIN][ONESMART_RUNNER] = task
+
 
     scan_interval_definitions = timedelta(
         seconds = SCAN_INTERVAL_DEFINITIONS
@@ -105,8 +107,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.data[DOMAIN].pop(entry.entry_id)
         
         hass.data[DOMAIN][ONESMART_RUNNER].cancel()
-        hass.data[DOMAIN][INTERVAL_TRACKER_DEFINITIONS].cancel()
-        hass.data[DOMAIN][INTERVAL_TRACKER_POLL].cancel()
         await hass.data[DOMAIN][ONESMART_WRAPPER].close()
 
     return unload_ok

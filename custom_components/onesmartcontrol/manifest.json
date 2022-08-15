@@ -1,10 +1,10 @@
 {
   "domain": "onesmartcontrol",
   "name": "One Smart Control",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "config_flow": true,
   "documentation": "https://github.com/PimDoos/onesmartcontrolha",
-  "issue_tracker": "https://github.com/PimDoos/onesmartcontrolha",
+  "issue_tracker": "https://github.com/PimDoos/onesmartcontrolha/issues",
   "requirements": [],
   "ssdp": [],
   "zeroconf": [],
