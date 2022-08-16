@@ -13,7 +13,8 @@ from homeassistant.const import (
     PERCENTAGE,
     DEVICE_CLASS_CO2, CONCENTRATION_PARTS_PER_MILLION,
     DEVICE_CLASS_TEMPERATURE, TEMP_CELSIUS,
-    DEVICE_CLASS_POWER, POWER_WATT, POWER_VOLT_AMPERE_REACTIVE,
+    DEVICE_CLASS_POWER, POWER_WATT, 
+    DEVICE_CLASS_POWER_FACTOR,
     DEVICE_CLASS_VOLTAGE, ELECTRIC_POTENTIAL_VOLT,
     DEVICE_CLASS_CURRENT, ELECTRIC_CURRENT_AMPERE,
     DEVICE_CLASS_FREQUENCY, FREQUENCY_HERTZ
@@ -260,8 +261,11 @@ class OneSmartWrapper():
                 for value_name in values_new:
                     value = values_new[value_name]
                     if isinstance(value, int):
-                        if value.bit_length() == BIT_LENGTH_DOUBLE:
+                        bit_length = value.bit_length()
+                        if bit_length >= BIT_LENGTH_DOUBLE - 4:
                             values_new[value_name] = struct.unpack("<d",value.to_bytes(8,byteorder="little"))[0]
+                            if values_new[value_name] < 1:
+                                values_new[value_name] = 0 
 
                 if device_id in self.cache[(COMMAND_APPARATUS,ACTION_GET)]:
                     values_cache = self.cache[(COMMAND_APPARATUS,ACTION_GET)][device_id]
@@ -324,9 +328,11 @@ class OneSmartWrapper():
                         #This returns weird numbers on HUAWEI SUN2000
                         elif "_power" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = POWER_WATT
-                            if "reactive" in attribute[RPC_NAME]:
-                                attribute[ATTR_UNIT_OF_MEASUREMENT] = POWER_VOLT_AMPERE_REACTIVE
                             attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_POWER
+                            if "reactive" in attribute[RPC_NAME]:
+                                attribute[ATTR_UNIT_OF_MEASUREMENT] = None
+                                attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_POWER_FACTOR
+
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
 
                         elif "current" in attribute[RPC_NAME]:
