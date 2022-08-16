@@ -76,7 +76,7 @@ Commands
 |user|get list|User accounts|
 |upgrade|check perform|Software updates|
 |sitepreset||Site preset triggers|
-|shell|?|?|
+|shell|||
 |trigger|get|Trigger links|
 
 **Action domains**
@@ -119,6 +119,7 @@ Commands
 |room|delete||Remove a room|
 |presetgroup|list||Get all scenes / automations|
 |device|list||Get all devices|
+|shell||username,password|Presumably set a password for a SSH user|
 |site|get||Gets system information|
 |site|update|name|Update the system name|
 |sitepreset|perform|id|Activate a sitepreset|
