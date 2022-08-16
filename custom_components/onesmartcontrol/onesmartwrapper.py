@@ -190,9 +190,7 @@ class OneSmartWrapper():
                 # Fill cache with RPC result (in corresponding subkey)
                 transaction = await self.command(command=flag_command, action=flag_action)
                 if flag_command == COMMAND_METER:
-                    if not RPC_METERS in transaction[RPC_RESULT]:
-                        self.cache[flag] = None
-                    else:
+                    if RPC_METERS in transaction[RPC_RESULT]:
                         self.cache[flag] = transaction[RPC_RESULT][RPC_METERS]
 
                 if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
