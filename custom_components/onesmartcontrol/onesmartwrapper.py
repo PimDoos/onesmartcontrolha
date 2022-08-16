@@ -179,7 +179,7 @@ class OneSmartWrapper():
                 transaction = await self.command(command=flag_command, action=flag_action)
                 self.cache[flag] = transaction[RPC_RESULT]
 
-                if flag == COMMAND_SITE:
+                if flag_command == COMMAND_SITE:
                     # Also store in Site Event cache
                     self.cache[EVENT_SITE_UPDATE] = transaction[RPC_RESULT]
 
@@ -190,7 +190,10 @@ class OneSmartWrapper():
                 # Fill cache with RPC result (in corresponding subkey)
                 transaction = await self.command(command=flag_command, action=flag_action)
                 if flag_command == COMMAND_METER:
-                    self.cache[flag] = transaction[RPC_RESULT][RPC_METERS]
+                    if not RPC_METERS in transaction[RPC_RESULT]:
+                        self.cache[flag] = None
+                    else:
+                        self.cache[flag] = transaction[RPC_RESULT][RPC_METERS]
 
                 if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
                     dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
@@ -198,15 +201,18 @@ class OneSmartWrapper():
             elif flag_command in [COMMAND_ENERGY, COMMAND_DEVICE]:
                 transaction = await self.command(command=flag_command, action = flag_action)
                 if flag_command == COMMAND_ENERGY:
-                    for entry in transaction[RPC_RESULT][RPC_VALUES]:
-                        self.cache[flag][entry[RPC_ID]] = entry[RPC_VALUE]
+                    if RPC_VALUES in transaction[RPC_RESULT]:
+                        for entry in transaction[RPC_RESULT][RPC_VALUES]:
+                            self.cache[flag][entry[RPC_ID]] = entry[RPC_VALUE]
 
                         if not ONESMART_UPDATE_POLL in dispatcher_topics:
                             dispatcher_topics.append(ONESMART_UPDATE_POLL)
                 elif flag_command == COMMAND_DEVICE:
-                    for entry in transaction[RPC_RESULT][RPC_DEVICES]:
-                        self.cache[flag][entry[RPC_ID]] = entry
-                    await self.discover_apparatus()
+                    if RPC_DEVICES in transaction[RPC_RESULT]:
+                        for entry in transaction[RPC_RESULT][RPC_DEVICES]:
+                            self.cache[flag][entry[RPC_ID]] = entry
+                        await self.discover_apparatus()
+
                 if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
                     dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
 
@@ -217,7 +223,10 @@ class OneSmartWrapper():
                             command=flag_command, action=flag_action, 
                             id=device_id
                         )
-                        self.cache[flag] = transaction[RPC_RESULT][RPC_ATTRIBUTES]
+                        if not RPC_ATTRIBUTES in transaction[RPC_RESULT]:
+                            self.cache[flag] = None
+                        else:
+                            self.cache[flag] = transaction[RPC_RESULT][RPC_ATTRIBUTES]
      
         self.update_flags = []        
         
@@ -251,27 +260,32 @@ class OneSmartWrapper():
                 command=COMMAND_APPARATUS, action=ACTION_GET, 
                 id=device_id, attributes=split_attributes
             )
+            if transaction == None:
+                continue
             if RPC_ERROR in transaction[RPC_RESULT]:
                 devices = self.cache[(COMMAND_DEVICE,ACTION_LIST)]
                 device = devices[device_id]
                 device_name = device[RPC_NAME]
-                warning(f"Could not load data for {device_name}: {transaction[RPC_RESULT]}")
+                warning(f"Could not update '{split_attributes}' for '{device_name}': {transaction[RPC_RESULT]}")
             else:
-                values_new = transaction[RPC_RESULT][RPC_ATTRIBUTES]
-                for value_name in values_new:
-                    value = values_new[value_name]
-                    if isinstance(value, int):
-                        bit_length = value.bit_length()
-                        if bit_length >= BIT_LENGTH_DOUBLE - 4:
-                            values_new[value_name] = struct.unpack("<d",value.to_bytes(8,byteorder="little"))[0]
-                            if values_new[value_name] < 1:
-                                values_new[value_name] = 0 
+                try:
+                    values_new = transaction[RPC_RESULT][RPC_ATTRIBUTES]
+                    for value_name in values_new:
+                        value = values_new[value_name]
+                        if isinstance(value, int):
+                            bit_length = value.bit_length()
+                            if bit_length >= BIT_LENGTH_DOUBLE - 4:
+                                values_new[value_name] = struct.unpack("<d",value.to_bytes(8,byteorder="little", signed=True))[0]
+                                if values_new[value_name] < 1:
+                                    values_new[value_name] = 0 
 
-                if device_id in self.cache[(COMMAND_APPARATUS,ACTION_GET)]:
-                    values_cache = self.cache[(COMMAND_APPARATUS,ACTION_GET)][device_id]
-                else:
-                    values_cache = {}
-                self.cache[(COMMAND_APPARATUS,ACTION_GET)][device_id] = values_cache | values_new
+                    if device_id in self.cache[(COMMAND_APPARATUS,ACTION_GET)]:
+                        values_cache = self.cache[(COMMAND_APPARATUS,ACTION_GET)][device_id]
+                    else:
+                        values_cache = {}
+                    self.cache[(COMMAND_APPARATUS,ACTION_GET)][device_id] = values_cache | values_new
+                except Exception as e:
+                    warning(f"Could not update '{split_attributes}' for '{device_name}': { e } ''")
             
         async_dispatcher_send(self.hass, ONESMART_UPDATE_APPARATUS)
 

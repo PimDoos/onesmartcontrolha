@@ -22,21 +22,25 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 
-async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up One Smart Control from a config entry."""
 
-    if DOMAIN not in hass.data:
-        hass.data[DOMAIN] = {}
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = {}
 
-    hass.data[DOMAIN][ONESMART_WRAPPER] = OneSmartWrapper(
-        username = config_entry.data.get(CONF_USERNAME),
-        password = config_entry.data.get(CONF_PASSWORD),
-        host = config_entry.data.get(CONF_HOST),
-        port = config_entry.data.get(CONF_PORT),
+
+    
+    wrapper = OneSmartWrapper(
+        username = entry.data.get(CONF_USERNAME),
+        password = entry.data.get(CONF_PASSWORD),
+        host = entry.data.get(CONF_HOST),
+        port = entry.data.get(CONF_PORT),
         hass = hass
     )
+    hass.data[DOMAIN][entry.entry_id][ONESMART_WRAPPER] = wrapper
+
     try:
-        connection_status = await hass.data[DOMAIN][ONESMART_WRAPPER].connect()
+        connection_status = await wrapper.connect()
     except:
         raise ConfigEntryNotReady
     if connection_status == CONNECT_FAIL_AUTH:
@@ -45,14 +49,14 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         raise ConfigEntryNotReady
 
     # Set update flags
-    await hass.data[DOMAIN][ONESMART_WRAPPER].update_definitions()
+    await wrapper.update_definitions()
     
 
     # Wait for incoming data
-    await hass.data[DOMAIN][ONESMART_WRAPPER].handle_update_flags()
+    await wrapper.handle_update_flags()
 
     # Check cache
-    cache = hass.data[DOMAIN][ONESMART_WRAPPER].get_cache()
+    cache = wrapper.get_cache()
 
     if len(cache[(COMMAND_METER,ACTION_LIST)]) == 0:
         raise ConfigEntryNotReady
@@ -62,16 +66,15 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         raise ConfigEntryNotReady
     
     # Subscribe to energy events
-    await hass.data[DOMAIN][ONESMART_WRAPPER].subscribe(topics=[TOPIC_ENERGY, TOPIC_SITE])
+    await wrapper.subscribe(topics=[TOPIC_ENERGY, TOPIC_SITE])
 
     # Fetch initial polling data
-    await hass.data[DOMAIN][ONESMART_WRAPPER].update_cache()
-    await hass.data[DOMAIN][ONESMART_WRAPPER].poll_apparatus()
+    await wrapper.update_cache()
 
-    # await hass.data[DOMAIN][ONESMART_WRAPPER].run()
+    # await wrapper.run()
     # Start the background runners
-    hass.data[DOMAIN][ONESMART_RUNNER] = asyncio.create_task(
-        hass.data[DOMAIN][ONESMART_WRAPPER].run()
+    hass.data[DOMAIN][entry.entry_id][ONESMART_RUNNER] = asyncio.create_task(
+        wrapper.run()
     )
 
 
@@ -83,17 +86,17 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     )
 
     async def update_definitions(event_time_utc: datetime):
-        await hass.data[DOMAIN][ONESMART_WRAPPER].update_definitions()
+        await hass.data[DOMAIN][entry.entry_id][ONESMART_WRAPPER].update_definitions()
 
     async def update_cache(event_time_utc: datetime):
-        await hass.data[DOMAIN][ONESMART_WRAPPER].update_cache()
+        await hass.data[DOMAIN][entry.entry_id][ONESMART_WRAPPER].update_cache()
 
-    hass.data[DOMAIN][INTERVAL_TRACKER_DEFINITIONS] = async_track_time_interval(hass, update_definitions, scan_interval_definitions)
-    hass.data[DOMAIN][INTERVAL_TRACKER_POLL] = async_track_time_interval(hass, update_cache, scan_interval_cache)
+    hass.data[DOMAIN][entry.entry_id][INTERVAL_TRACKER_DEFINITIONS] = async_track_time_interval(hass, update_definitions, scan_interval_definitions)
+    hass.data[DOMAIN][entry.entry_id][INTERVAL_TRACKER_POLL] = async_track_time_interval(hass, update_cache, scan_interval_cache)
 
     for platform in PLATFORMS:
         hass.async_create_task(
-            hass.config_entries.async_forward_entry_setup(config_entry, platform)
+            hass.config_entries.async_forward_entry_setup(entry, platform)
         )
     
     print("One Smart Control is done with startup!")
@@ -104,9 +107,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         if entry.entry_id in hass.data[DOMAIN]:
+            hass.data[DOMAIN][entry.entry_id][ONESMART_RUNNER].cancel()
+            await hass.data[DOMAIN][entry.entry_id][ONESMART_WRAPPER].close()
+            
             hass.data[DOMAIN].pop(entry.entry_id)
         
-        hass.data[DOMAIN][ONESMART_RUNNER].cancel()
-        await hass.data[DOMAIN][ONESMART_WRAPPER].close()
+        
 
     return unload_ok

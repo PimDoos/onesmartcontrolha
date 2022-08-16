@@ -20,10 +20,10 @@ from .onesmartwrapper import OneSmartWrapper
 
 from .const import * 
 
-async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, async_add_entities):
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Set up the One Smart Control sensors"""
 
-    wrapper: OneSmartWrapper = hass.data[DOMAIN][ONESMART_WRAPPER]
+    wrapper: OneSmartWrapper = hass.data[DOMAIN][entry.entry_id][ONESMART_WRAPPER]
 
     cache = wrapper.get_cache()
 
@@ -34,7 +34,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, asyn
         entities.append(
             OneSmartSensor(
                 hass,
-                config_entry,
+                entry,
                 wrapper,
                 ONESMART_UPDATE_PUSH,
                 meter[RPC_ID],
@@ -52,7 +52,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, asyn
         entities.append(
             OneSmartSensor(
                 hass,
-                config_entry,
+                entry,
                 wrapper,
                 ONESMART_UPDATE_POLL,
                 meter[RPC_ID],
@@ -71,7 +71,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, asyn
     entities.append(
         OneSmartSensor(
             hass,
-            config_entry,
+            entry,
             wrapper,
             ONESMART_UPDATE_PUSH,
             "mode",
@@ -109,7 +109,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, asyn
                 entities.append(
                     OneSmartSensor(
                         hass,
-                        config_entry,
+                        entry,
                         wrapper,
                         ONESMART_UPDATE_APPARATUS,
                         f"{device_id}.{attribute_name}",
