@@ -1,8 +1,4 @@
-
-
-import asyncio
 from logging import error, warning
-from re import match
 import struct
 from homeassistant.core import HomeAssistant, CoreState
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -247,10 +243,10 @@ class OneSmartWrapper():
                     attribute_index = 0
             
             end_index = attribute_index + MAX_APPARATUS_POLL
-            if end_index >= len(attribute_names):
+            if end_index > len(attribute_names):
                 split_attributes = attribute_names[attribute_index:]
             else:
-                split_attributes = attribute_names[attribute_index:end_index+1]
+                split_attributes = attribute_names[attribute_index:end_index]
 
             self.last_apparatus_index[device_id] = end_index
 
