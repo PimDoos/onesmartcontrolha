@@ -261,7 +261,7 @@ class OneSmartWrapper():
                     value = values_new[value_name]
                     if isinstance(value, int):
                         if value.bit_length() == BIT_LENGTH_DOUBLE:
-                            values_new[value_name] = struct.unpack("<d",value.to_bytes(8,byteorder="little"))
+                            values_new[value_name] = struct.unpack("<d",value.to_bytes(8,byteorder="little"))[0]
 
                 if device_id in self.cache[(COMMAND_APPARATUS,ACTION_GET)]:
                     values_cache = self.cache[(COMMAND_APPARATUS,ACTION_GET)][device_id]
