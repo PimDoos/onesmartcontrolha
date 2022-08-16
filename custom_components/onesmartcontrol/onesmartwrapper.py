@@ -238,7 +238,7 @@ class OneSmartWrapper():
             if not device_id in self.last_apparatus_index:
                 attribute_index = 0
             else:
-                attribute_index = self.last_apparatus_index[device_id] + 1
+                attribute_index = self.last_apparatus_index[device_id]
                 if attribute_index >= len(attribute_names):
                     attribute_index = 0
             
