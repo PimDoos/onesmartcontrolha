@@ -13,11 +13,14 @@ from homeassistant.const import (
     DEVICE_CLASS_POWER_FACTOR,
     DEVICE_CLASS_VOLTAGE, ELECTRIC_POTENTIAL_VOLT,
     DEVICE_CLASS_CURRENT, ELECTRIC_CURRENT_AMPERE,
-    DEVICE_CLASS_FREQUENCY, FREQUENCY_HERTZ
+    DEVICE_CLASS_FREQUENCY, FREQUENCY_HERTZ,
+    DEVICE_CLASS_ENERGY, ENERGY_KILO_WATT_HOUR,
     
 )
 from homeassistant.components.sensor import (
-    STATE_CLASS_MEASUREMENT, ATTR_STATE_CLASS
+    STATE_CLASS_MEASUREMENT, ATTR_STATE_CLASS,
+    STATE_CLASS_TOTAL,
+    STATE_CLASS_TOTAL_INCREASING
 )
 from time import time
 
@@ -231,6 +234,10 @@ class OneSmartWrapper():
     async def poll_apparatus(self):
          # Update apparatus values
         for device_id in self.device_apparatus_attributes:
+            devices = self.cache[(COMMAND_DEVICE,ACTION_LIST)]
+            device = devices[device_id]
+            device_name = device[RPC_NAME]
+            
             attributes = self.device_apparatus_attributes[device_id]
             attribute_names = [attribute_name for attribute_name in attributes]
 
@@ -257,9 +264,6 @@ class OneSmartWrapper():
             if transaction == None:
                 continue
             if RPC_ERROR in transaction[RPC_RESULT]:
-                devices = self.cache[(COMMAND_DEVICE,ACTION_LIST)]
-                device = devices[device_id]
-                device_name = device[RPC_NAME]
                 warning(f"Could not update '{split_attributes}' for '{device_name}': {transaction[RPC_RESULT]}")
             else:
                 try:
@@ -357,6 +361,19 @@ class OneSmartWrapper():
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = FREQUENCY_HERTZ
                             attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_FREQUENCY
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+
+                        elif "e_total" == attribute[RPC_NAME]:
+                            attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
+                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_ENERGY
+                            attribute[ATTR_STATE_CLASS] = STATE_CLASS_TOTAL
+                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+
+                        elif "e_day" == attribute[RPC_NAME]:
+                            attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
+                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_ENERGY
+                            attribute[ATTR_STATE_CLASS] = STATE_CLASS_TOTAL_INCREASING
+                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+
                     elif attribute[RPC_TYPE] in [TYPE_STRING]:
                         self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
     
