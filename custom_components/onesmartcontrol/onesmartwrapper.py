@@ -237,9 +237,12 @@ class OneSmartWrapper():
             devices = self.cache[(COMMAND_DEVICE,ACTION_LIST)]
             device = devices[device_id]
             device_name = device[RPC_NAME]
-            
+
             attributes = self.device_apparatus_attributes[device_id]
             attribute_names = [attribute_name for attribute_name in attributes]
+
+            if(len(attributes) == 0):
+                continue
 
             # Only poll MAX_APPARATUS_POLL per cycle
             if not device_id in self.last_apparatus_index:
