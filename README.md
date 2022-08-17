@@ -1,4 +1,6 @@
 # One Smart Control integration
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+
 Home Assistant integration for One Smart Control server
 
 Uses local push via JSON-RPC over TLS on port 9010. Thanks to [tbone789](https://tweakers.net/gallery/532104/) on Tweakers for helping reverse engineer the protocol.
@@ -13,5 +15,18 @@ Setup via HACS
 
 Supported functionality
 -----------------------
-- Energy sensors: Realtime power consumption (W)
-- Energy sensors: Cumulative energy consumption (kWh)
+Supported OneConnect sensors:
+- P1 meter (Energy / Power)
+- Pulse meter (Energy / Power)
+- Phase meter (Energy / Power)
+- System Mode (Home/Away/Sleep)
+
+Supported device sensors:
+- Temperature
+- CO2
+- Power
+- Huawei SUN2000 Energy (Total/day)
+- Voltage
+- Current
+- Frequency
+- Percentages
