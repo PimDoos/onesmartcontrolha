@@ -97,7 +97,15 @@ class OneSmartWrapper():
                         warning(f"Ping to server timed out. Reconnecting.")
                         await self.connect()
                     last_ping = time()
+            except ConnectionResetError:
+                await self.connect()
+            except BrokenPipeError:
+                await self.connect()
+            except Exception as e:
+                error(f"Unknown error while checking the connection: {e}")
 
+        
+            try:
                 # Read data from the socket
                 await self.hass.async_add_executor_job(
                     self.socket.get_responses

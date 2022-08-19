@@ -52,6 +52,7 @@ class OneSmartSocket:
         rpc_message = { RPC_COMMAND:command, RPC_TRANSACTION:transaction_id } | kwargs
         rpc_data = json.dumps(rpc_message) + "\r\n"
         self._ssl_socket.sendall(rpc_data.encode())
+        self._response_cache[transaction_id] = None
 
         return transaction_id
     
