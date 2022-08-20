@@ -1,3 +1,4 @@
+from asyncio import sleep
 from logging import error, warning
 import struct
 from homeassistant.core import HomeAssistant, CoreState
@@ -74,7 +75,17 @@ class OneSmartWrapper():
         if RPC_ERROR in login_status:
             return CONNECT_FAIL_AUTH
         else:
-            return CONNECT_SUCCESS
+            try:
+                # Subscribe to energy events
+                await self.subscribe(topics=[TOPIC_ENERGY, TOPIC_SITE])
+
+                # Fetch initial polling data
+                await self.update_cache()
+            except:
+                return CONNECT_FAIL_NETWORK
+            finally:
+
+                return CONNECT_SUCCESS
 
     async def run(self):
         last_ping = time()
@@ -97,13 +108,11 @@ class OneSmartWrapper():
                         warning(f"Ping to server timed out. Reconnecting.")
                         await self.connect()
                     last_ping = time()
-            except ConnectionResetError:
-                await self.connect()
-            except BrokenPipeError:
+            except ConnectionError:
+                await sleep(SOCKET_RECONNECT_DELAY)
                 await self.connect()
             except Exception as e:
                 error(f"Unknown error while checking the connection: {e}")
-
         
             try:
                 # Read data from the socket

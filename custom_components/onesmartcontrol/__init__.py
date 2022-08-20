@@ -51,7 +51,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Set update flags
     await wrapper.update_definitions()
     
-
     # Wait for incoming data
     await wrapper.handle_update_flags()
 
@@ -65,11 +64,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     elif len(cache[(COMMAND_DEVICE,ACTION_LIST)]) == 0:
         raise ConfigEntryNotReady
     
-    # Subscribe to energy events
-    await wrapper.subscribe(topics=[TOPIC_ENERGY, TOPIC_SITE])
-
-    # Fetch initial polling data
-    await wrapper.update_cache()
 
     # await wrapper.run()
     # Start the background runners
