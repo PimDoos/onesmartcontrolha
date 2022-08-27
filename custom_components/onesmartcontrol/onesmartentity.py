@@ -52,3 +52,14 @@ class OneSmartEntity(Entity):
         #self.wrapper = self.hass.data[DOMAIN][ONESMART_WRAPPER]
         self.cache = self.wrapper.get_cache()
         
+    def get_cache_value(self, key):
+        value = self.cache[self._source]
+        for node in key.split("."):
+            try:
+                value = value[node]
+            except:
+                try:
+                    value = value[int(node)]
+                except:
+                    value = None
+        return value

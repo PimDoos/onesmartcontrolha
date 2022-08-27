@@ -4,24 +4,24 @@ import struct
 from homeassistant.core import HomeAssistant, CoreState
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from functools import partial
+from socket import error as SOCKET_ERROR
 
 from homeassistant.const import (
     Platform, ATTR_UNIT_OF_MEASUREMENT, ATTR_DEVICE_CLASS, CONF_PLATFORM,
     PERCENTAGE,
-    DEVICE_CLASS_CO2, CONCENTRATION_PARTS_PER_MILLION,
-    DEVICE_CLASS_TEMPERATURE, TEMP_CELSIUS,
-    DEVICE_CLASS_POWER, POWER_WATT, 
-    DEVICE_CLASS_POWER_FACTOR,
-    DEVICE_CLASS_VOLTAGE, ELECTRIC_POTENTIAL_VOLT,
-    DEVICE_CLASS_CURRENT, ELECTRIC_CURRENT_AMPERE,
-    DEVICE_CLASS_FREQUENCY, FREQUENCY_HERTZ,
-    DEVICE_CLASS_ENERGY, ENERGY_KILO_WATT_HOUR,
+    CONCENTRATION_PARTS_PER_MILLION,
+    TEMP_CELSIUS,
+    POWER_WATT,
+    ELECTRIC_POTENTIAL_VOLT,
+    ELECTRIC_CURRENT_AMPERE,
+    FREQUENCY_HERTZ,
+    ENERGY_KILO_WATT_HOUR,
     
 )
 from homeassistant.components.sensor import (
-    STATE_CLASS_MEASUREMENT, ATTR_STATE_CLASS,
-    STATE_CLASS_TOTAL,
-    STATE_CLASS_TOTAL_INCREASING
+    SensorDeviceClass, 
+    SensorStateClass,
+    ATTR_STATE_CLASS
 )
 from time import time
 
@@ -108,7 +108,8 @@ class OneSmartWrapper():
                         warning(f"Ping to server timed out. Reconnecting.")
                         await self.connect()
                     last_ping = time()
-            except ConnectionError:
+            except SOCKET_ERROR as e:
+                warning(f"Connection error: '{e}' Reconnecting in {SOCKET_RECONNECT_DELAY} seconds.")
                 await sleep(SOCKET_RECONNECT_DELAY)
                 await self.connect()
             except Exception as e:
@@ -133,6 +134,7 @@ class OneSmartWrapper():
             except Exception as e:
                 error(f"Error in gateway wrapper: { e }")
 
+        warning(f"Gateway wrapper exited.")
 
     async def close(self):
         await self.hass.async_add_executor_job(
@@ -341,11 +343,11 @@ class OneSmartWrapper():
                 if attribute[RPC_ACCESS] == ACCESS_READ:
                     attribute[CONF_PLATFORM] = Platform.SENSOR
                     if attribute[RPC_TYPE] in [TYPE_NUMBER, TYPE_REAL]:
-                        attribute[ATTR_STATE_CLASS] = STATE_CLASS_MEASUREMENT
+                        attribute[ATTR_STATE_CLASS] = SensorStateClass.MEASUREMENT
                         # Temperature sensors
                         if "_temp" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = TEMP_CELSIUS
-                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_TEMPERATURE
+                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.TEMPERATURE
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
 
                         elif "_percent" in attribute[RPC_NAME]:
@@ -354,44 +356,44 @@ class OneSmartWrapper():
 
                         elif "co2_level" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = CONCENTRATION_PARTS_PER_MILLION
-                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_CO2
+                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.CO2
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
                         
                         #This returns weird numbers on HUAWEI SUN2000
                         elif "_power" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = POWER_WATT
-                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_POWER
+                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.POWER
                             if "reactive" in attribute[RPC_NAME]:
                                 attribute[ATTR_UNIT_OF_MEASUREMENT] = None
-                                attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_POWER_FACTOR
+                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.POWER_FACTOR
 
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
 
                         elif "current" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_CURRENT_AMPERE
-                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_CURRENT
+                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.CURRENT
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
                         
                         elif "voltage" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_POTENTIAL_VOLT
-                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_VOLTAGE
+                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.VOLTAGE
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
                         
                         elif "frequency" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = FREQUENCY_HERTZ
-                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_FREQUENCY
+                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.FREQUENCY
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
 
                         elif "e_total" == attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
-                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_ENERGY
-                            attribute[ATTR_STATE_CLASS] = STATE_CLASS_TOTAL
+                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
+                            attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
 
                         elif "e_day" == attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
-                            attribute[ATTR_DEVICE_CLASS] = DEVICE_CLASS_ENERGY
-                            attribute[ATTR_STATE_CLASS] = STATE_CLASS_TOTAL_INCREASING
+                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
+                            attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
 
                     elif attribute[RPC_TYPE] in [TYPE_STRING]:

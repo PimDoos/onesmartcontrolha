@@ -4,13 +4,14 @@ from homeassistant.config_entries import ConfigEntry
 
 
 from homeassistant.const import (
-    POWER_WATT, DEVICE_CLASS_POWER,
-    ENERGY_WATT_HOUR, DEVICE_CLASS_ENERGY,
+    POWER_WATT, 
+    ENERGY_WATT_HOUR,
     ATTR_IDENTIFIERS, ATTR_DEFAULT_NAME, ATTR_SW_VERSION, ATTR_VIA_DEVICE,
     ATTR_UNIT_OF_MEASUREMENT, ATTR_DEVICE_CLASS, ATTR_NAME, CONF_PLATFORM, Platform
 )
 from homeassistant.components.sensor import (
-    STATE_CLASS_MEASUREMENT, STATE_CLASS_TOTAL, STATE_CLASS_TOTAL_INCREASING, ATTR_STATE_CLASS,
+    SensorDeviceClass, SensorStateClass,
+    ATTR_STATE_CLASS,
     SensorEntity
 )
 from homeassistant.core import HomeAssistant
@@ -44,8 +45,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
                 None,
                 POWER_WATT,
                 None,
-                DEVICE_CLASS_POWER,
-                STATE_CLASS_MEASUREMENT
+                SensorDeviceClass.POWER,
+                SensorStateClass.MEASUREMENT
             )
         )
 
@@ -62,8 +63,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
                 None,
                 ENERGY_WATT_HOUR,
                 None,
-                DEVICE_CLASS_ENERGY,
-                STATE_CLASS_TOTAL
+                SensorDeviceClass.ENERGY,
+                SensorStateClass.TOTAL
             )
         )
 
@@ -203,18 +204,6 @@ class OneSmartSensor(OneSmartEntity, SensorEntity):
             return f"{DOMAIN}-{self._device_id}-{self._key}-{self._suffix}"
         else:
             return f"{DOMAIN}-{self._device_id}-{self._key}"
-    
-    def get_cache_value(self, key):
-        value = self.cache[self._source]
-        for node in key.split("."):
-            try:
-                value = value[node]
-            except:
-                try:
-                    value = value[int(value)]
-                except:
-                    value = None
-        return value
 
     @property
     def device_info(self):
