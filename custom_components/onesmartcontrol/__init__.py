@@ -12,8 +12,6 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 
 from homeassistant.helpers.event import async_track_time_interval
 
-from homeassistant.util import dt as dt_util
-
 from .const import *
 from .onesmartwrapper import OneSmartWrapper
 
@@ -27,8 +25,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {}
-
-
     
     wrapper = OneSmartWrapper(
         username = entry.data.get(CONF_USERNAME),
@@ -47,20 +43,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryAuthFailed
     elif wrapper_status != SETUP_SUCCESS:
         raise ConfigEntryNotReady  
-
-    # await wrapper.run()
-    # Start the background runners
-    
-    runners = []
-    runners.append(asyncio.create_task(
-        wrapper.run_push()
-    ))
-    runners.append(asyncio.create_task(
-        wrapper.run_poll()
-    ))
-
-
-    hass.data[DOMAIN][entry.entry_id][ONESMART_RUNNER] = runners
 
     scan_interval_definitions = timedelta(
         seconds = SCAN_INTERVAL_DEFINITIONS
@@ -91,8 +73,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         if entry.entry_id in hass.data[DOMAIN]:
-            for task in hass.data[DOMAIN][entry.entry_id][ONESMART_RUNNER]:
-                task.cancel()
             await hass.data[DOMAIN][entry.entry_id][ONESMART_WRAPPER].close()
             
             hass.data[DOMAIN].pop(entry.entry_id)

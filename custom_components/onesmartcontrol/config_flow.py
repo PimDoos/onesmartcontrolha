@@ -45,7 +45,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     )
 
     # try:
-    connection_status = await wrapper.connect()
+    connection_status = await wrapper.setup()
     # except:
     #     raise CannotConnect
     if connection_status == SETUP_FAIL_AUTH:

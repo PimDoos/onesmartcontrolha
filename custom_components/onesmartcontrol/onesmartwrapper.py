@@ -17,6 +17,7 @@ from homeassistant.const import (
     ELECTRIC_CURRENT_AMPERE,
     FREQUENCY_HERTZ,
     ENERGY_KILO_WATT_HOUR,
+    VOLUME_LITERS, TIME_MINUTES
     
 )
 from homeassistant.components.sensor import (
@@ -39,6 +40,7 @@ class OneSmartWrapper():
             SOCKET_PUSH: 0,
             SOCKET_POLL: 0
         }
+        self.runners = []
 
         self.username = username
         self.password = password
@@ -83,6 +85,13 @@ class OneSmartWrapper():
         elif len(cache[(COMMAND_DEVICE,ACTION_LIST)]) == 0:
             return SETUP_FAIL_CACHE
 
+        self.runners.append(asyncio.create_task(
+            self.run_push()
+        ))
+        self.runners.append(asyncio.create_task(
+            self.run_poll()
+        ))
+
         return SETUP_SUCCESS
 
     async def connect(self, socket_name):
@@ -110,22 +119,22 @@ class OneSmartWrapper():
             return SETUP_FAIL_AUTH
         else:
             try:
-                # Subscribe to energy events
-                await self.subscribe(topics=[TOPIC_ENERGY, TOPIC_SITE])
-
-                # Fetch initial polling data
-                await self.update_cache()
+                if socket_name == SOCKET_PUSH:
+                    # Subscribe to energy events
+                    await self.subscribe(topics=[TOPIC_ENERGY, TOPIC_SITE])
+                elif socket_name == SOCKET_POLL:
+                    # Fetch initial polling data
+                    await self.update_cache()
             except:
                 return SETUP_FAIL_NETWORK
             finally:
-
                 return SETUP_SUCCESS
 
     async def ensure_connected_socket(self, socket_name):
         try:
             # Make sure socket is connected. Reconnect if neccessary
             if not self.sockets[socket_name].is_connected:
-                await self.connect()
+                await self.connect(socket_name)
 
             # Keep the connection alive
             if time() - self.sockets_last_ping[socket_name] > PING_INTERVAL:
@@ -135,12 +144,12 @@ class OneSmartWrapper():
                 if ping_result == None:
                     # Ping timed out, reconnect
                     warning(f"Ping to server timed out. Reconnecting.")
-                    await self.connect()
+                    await self.connect(socket_name)
                 self.sockets_last_ping[socket_name] = time()
         except SOCKET_ERROR as e:
             warning(f"Connection error on socket {socket_name}: '{e}' Reconnecting in {SOCKET_RECONNECT_DELAY} seconds.")
             await sleep(SOCKET_RECONNECT_DELAY)
-            return await self.connect()
+            return await self.connect(socket_name)
         except Exception as e:
             error(f"Unknown error while checking the connection: {e}")
             return False
@@ -149,10 +158,12 @@ class OneSmartWrapper():
 
 
     async def run_poll(self):
+        socket_name = SOCKET_POLL
+
         # Loop through received data, blocked by socket.read
         while self.hass.state == CoreState.not_running or self.hass.is_running:
-            await self.ensure_connected_socket(SOCKET_POLL)
-            socket = self.sockets[SOCKET_POLL]
+            await self.ensure_connected_socket(socket_name)
+            socket = self.sockets[socket_name]
             try:
                 # Read data from the socket
                 await self.hass.async_add_executor_job(
@@ -166,16 +177,17 @@ class OneSmartWrapper():
                 await self.poll_apparatus()
 
             except Exception as e:
-                error(f"Error in gateway wrapper: { e }")
+                error(f"Error in { socket_name } gateway wrapper: { e }")
 
-        warning(f"Gateway wrapper exited.")
+        warning(f"Gateway wrapper exited ({ socket_name }).")
 
     async def run_push(self):
+        socket_name = SOCKET_PUSH
 
         # Loop through received data, blocked by socket.read
         while self.hass.state == CoreState.not_running or self.hass.is_running:
-            await self.ensure_connected_socket(SOCKET_PUSH)
-            socket = self.sockets[SOCKET_PUSH]
+            await self.ensure_connected_socket(socket_name)
+            socket = self.sockets[socket_name]
         
             try:
                 await self.hass.async_add_executor_job(
@@ -200,19 +212,23 @@ class OneSmartWrapper():
 
                 # Send queued push commands
                 for queued_command in self.command_queue:
-                    self.command(SOCKET_PUSH, queued_command.pop("command"), kwargs = queued_command)
+                    self.command(socket_name, queued_command.pop("command"), kwargs = queued_command)
 
 
             except Exception as e:
-                error(f"Error in { SOCKET_PUSH } gateway wrapper: { e }")
+                error(f"Error in { socket_name } gateway wrapper: { e }")
 
-        warning(f"Gateway wrapper exited ({ SOCKET_PUSH }).")
+        warning(f"Gateway wrapper exited ({ socket_name }).")
 
     async def close(self):
+        for task in self.runners:
+            task.cancel()
+
         for socket_name in self.sockets:
             await self.hass.async_add_executor_job(
                 self.sockets[socket_name].close
             )
+        
 
     """Send command to the socket and return the transaction id"""
     async def command(self, socket_name, command, **kwargs) -> int:
@@ -403,25 +419,33 @@ class OneSmartWrapper():
 
             for attribute in attributes:
                 if attribute[RPC_ACCESS] == ACCESS_READ:
-                    attribute[CONF_PLATFORM] = Platform.SENSOR
                     if attribute[RPC_TYPE] in [TYPE_NUMBER, TYPE_REAL]:
+                        attribute[CONF_PLATFORM] = Platform.SENSOR
                         attribute[ATTR_STATE_CLASS] = SensorStateClass.MEASUREMENT
                         # Temperature sensors
                         if "_temp" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = TEMP_CELSIUS
                             attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.TEMPERATURE
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                            continue
 
                         elif "_percent" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = PERCENTAGE
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                            continue
 
                         elif "co2_level" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = CONCENTRATION_PARTS_PER_MILLION
                             attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.CO2
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                            continue
                         
-                        #This returns weird numbers on HUAWEI SUN2000
+                        elif "flow_rate_4graph" in attribute[RPC_NAME]:
+                            attribute[ATTR_UNIT_OF_MEASUREMENT] = f"{VOLUME_LITERS}/{TIME_MINUTES}"
+                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                            continue
+                        
+                        
                         elif "_power" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = POWER_WATT
                             attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.POWER
@@ -430,38 +454,59 @@ class OneSmartWrapper():
                                 attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.POWER_FACTOR
 
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                            continue
 
                         elif "current" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_CURRENT_AMPERE
                             attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.CURRENT
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                            continue
                         
                         elif "voltage" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_POTENTIAL_VOLT
                             attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.VOLTAGE
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                            continue
                         
                         elif "frequency" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = FREQUENCY_HERTZ
                             attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.FREQUENCY
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                            continue
 
                         elif "e_total" == attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
                             attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
                             attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                            continue
 
-                        
+
 
                         elif "e_day" == attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
                             attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
                             attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                            continue
 
                     elif attribute[RPC_TYPE] in [TYPE_STRING]:
+                        attribute[CONF_PLATFORM] = Platform.SENSOR
                         self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                        continue
+
+                elif attribute[RPC_ACCESS] == ACCESS_READWRITE:
+                    if "operating_mode" in attribute[RPC_NAME]:
+                        attribute[CONF_PLATFORM] = Platform.SENSOR
+                        self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                        continue
+            
+
+                
+
+
+
+
     
     def get_apparatus_attributes(self, device_id = None):
         if device_id != None:

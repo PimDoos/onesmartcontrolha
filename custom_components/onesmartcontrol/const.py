@@ -129,3 +129,23 @@ BIT_LENGTH_DOUBLE = 64
 MAX_APPARATUS_POLL = 4
 PING_INTERVAL = 30
 DEFAULT_PORT = 9010
+
+
+CLIMATE_ENTITY_ATTRIBUTES = [
+    [
+        "operating_mode",
+        "system_onoff",
+        "room_temperature_zone1",
+        "hc_thermostat_target_temperature_zone1"
+    ]
+
+]
+WATER_HEATER_ENTITY_ATTRIBUTES = [
+    [
+        "operating_mode_dhw",
+        "dhw_temperature_drop",
+        "water_tank_setpoint",
+        "water_tank_temperature",
+        "dhw_on_prohibit"
+    ]
+]
