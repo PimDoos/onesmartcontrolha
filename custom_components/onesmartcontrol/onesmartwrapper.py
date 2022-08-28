@@ -114,7 +114,7 @@ class OneSmartWrapper():
                 self.sockets[socket_name].get_transaction,
                 login_transaction
             )
-
+        self.sockets_last_ping[socket_name] = time()
         if RPC_ERROR in login_status:
             return SETUP_FAIL_AUTH
         else:
