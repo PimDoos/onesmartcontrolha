@@ -1,4 +1,4 @@
-"""Config flow for Kia Connected Services integration."""
+"""Config flow for One Smart Control integration."""
 from __future__ import annotations
 
 import logging
@@ -59,7 +59,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Kia Connected Services."""
+    """Handle a config flow for One Smart Control."""
 
     VERSION = 1
 
