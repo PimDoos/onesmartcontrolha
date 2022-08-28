@@ -40,37 +40,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id][ONESMART_WRAPPER] = wrapper
 
     try:
-        connection_status = await wrapper.connect()
+        wrapper_status = await wrapper.setup()
     except:
         raise ConfigEntryNotReady
-    if connection_status == CONNECT_FAIL_AUTH:
+    if wrapper_status == SETUP_FAIL_AUTH:
         raise ConfigEntryAuthFailed
-    elif connection_status == CONNECT_FAIL_NETWORK:
-        raise ConfigEntryNotReady
-
-    # Set update flags
-    await wrapper.update_definitions()
-    
-    # Wait for incoming data
-    await wrapper.handle_update_flags()
-
-    # Check cache
-    cache = wrapper.get_cache()
-
-    if len(cache[(COMMAND_METER,ACTION_LIST)]) == 0:
-        raise ConfigEntryNotReady
-    elif len(cache[(COMMAND_SITE,ACTION_GET)]) == 0:
-        raise ConfigEntryNotReady
-    elif len(cache[(COMMAND_DEVICE,ACTION_LIST)]) == 0:
-        raise ConfigEntryNotReady
-    
+    elif wrapper_status != SETUP_SUCCESS:
+        raise ConfigEntryNotReady  
 
     # await wrapper.run()
     # Start the background runners
-    hass.data[DOMAIN][entry.entry_id][ONESMART_RUNNER] = asyncio.create_task(
-        wrapper.run()
-    )
+    
+    runners = []
+    runners.append(asyncio.create_task(
+        wrapper.run_push()
+    ))
+    runners.append(asyncio.create_task(
+        wrapper.run_poll()
+    ))
 
+
+    hass.data[DOMAIN][entry.entry_id][ONESMART_RUNNER] = runners
 
     scan_interval_definitions = timedelta(
         seconds = SCAN_INTERVAL_DEFINITIONS
@@ -101,7 +91,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         if entry.entry_id in hass.data[DOMAIN]:
-            hass.data[DOMAIN][entry.entry_id][ONESMART_RUNNER].cancel()
+            for task in hass.data[DOMAIN][entry.entry_id][ONESMART_RUNNER]:
+                task.cancel()
             await hass.data[DOMAIN][entry.entry_id][ONESMART_WRAPPER].close()
             
             hass.data[DOMAIN].pop(entry.entry_id)

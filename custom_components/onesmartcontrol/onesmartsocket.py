@@ -1,7 +1,6 @@
 """One Smart Control JSON-RPC Socket implementation"""
 from hashlib import sha1
 import json
-from random import randint
 from select import select
 import socket
 import ssl
@@ -28,7 +27,8 @@ class OneSmartSocket:
 
         self._ssl_socket = self._ssl_context.wrap_socket(self._raw_socket)
         self._ssl_socket.connect((host, port))
-        return self.is_connected()
+        self._transaction_count = 0
+        return self.is_connected
 
     def authenticate(self, username, password):
         password_hash = sha1(password.encode()).hexdigest()
@@ -37,18 +37,17 @@ class OneSmartSocket:
     def close(self):
         self._ssl_socket.close()
 
-
+    @property
     def is_connected(self):
         if self._ssl_socket.get_channel_binding() == None:
             return False
         else:
             return True
 
-
-
     """Start a new transaction"""
     def send_cmd(self, command, **kwargs):
-        transaction_id = randint(1, MAX_TRANSACTION_ID)
+        self._transaction_count += 1
+        transaction_id = self._transaction_count
         rpc_message = { RPC_COMMAND:command, RPC_TRANSACTION:transaction_id } | kwargs
         rpc_data = json.dumps(rpc_message) + "\r\n"
         self._ssl_socket.sendall(rpc_data.encode())
