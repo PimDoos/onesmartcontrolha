@@ -18,7 +18,7 @@ from homeassistant.const import (
     
 )
 
-from .const import DOMAIN, INTEGRATION_TITLE, CONNECT_FAIL_AUTH, CONNECT_FAIL_NETWORK, DEFAULT_PORT
+from .const import DOMAIN, INTEGRATION_TITLE, SETUP_FAIL_AUTH, SETUP_FAIL_NETWORK, DEFAULT_PORT
 from .onesmartwrapper import OneSmartWrapper
 
 _LOGGER = logging.getLogger(__name__)
@@ -48,9 +48,9 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     connection_status = await wrapper.connect()
     # except:
     #     raise CannotConnect
-    if connection_status == CONNECT_FAIL_AUTH:
+    if connection_status == SETUP_FAIL_AUTH:
         raise InvalidAuth
-    elif connection_status == CONNECT_FAIL_NETWORK:
+    elif connection_status == SETUP_FAIL_NETWORK:
         raise CannotConnect
     
     

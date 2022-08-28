@@ -1,4 +1,5 @@
 from asyncio import sleep
+import asyncio
 from logging import error, warning
 import struct
 from homeassistant.core import HomeAssistant, CoreState
@@ -30,7 +31,14 @@ from .onesmartsocket import OneSmartSocket
 
 class OneSmartWrapper():
     def __init__(self, username, password, host, port, hass: HomeAssistant):
-        self.socket = OneSmartSocket()
+        self.sockets = {
+            SOCKET_PUSH: OneSmartSocket(),
+            SOCKET_POLL: OneSmartSocket()
+        }
+        self.sockets_last_ping = {
+            SOCKET_PUSH: 0,
+            SOCKET_POLL: 0
+        }
 
         self.username = username
         self.password = password
@@ -38,6 +46,7 @@ class OneSmartWrapper():
         self.port = port
 
         self.hass = hass
+        
         self.cache = dict()
         self.cache[EVENT_ENERGY_CONSUMPTION] = dict()
         self.cache[(COMMAND_METER,ACTION_LIST)] = dict()
@@ -47,33 +56,58 @@ class OneSmartWrapper():
         self.cache[(COMMAND_APPARATUS,ACTION_GET)] = dict()
 
         self.update_flags = []
+        self.command_queue = []
 
         self.last_apparatus_index = dict()
         self.device_apparatus_attributes = dict()
     
-    async def connect(self):
+    async def setup(self):
+        for socket_name in self.sockets:
+            connection_status = await self.connect(socket_name)
+            if connection_status != SETUP_SUCCESS:
+                return connection_status
+        
+        # Set update flags
+        await self.update_definitions()
+        
+        # Wait for incoming data
+        await self.handle_update_flags()
+
+        # Check cache
+        cache = self.get_cache()
+
+        if len(cache[(COMMAND_METER,ACTION_LIST)]) == 0:
+            return SETUP_FAIL_CACHE
+        elif len(cache[(COMMAND_SITE,ACTION_GET)]) == 0:
+            return SETUP_FAIL_CACHE
+        elif len(cache[(COMMAND_DEVICE,ACTION_LIST)]) == 0:
+            return SETUP_FAIL_CACHE
+
+        return SETUP_SUCCESS
+
+    async def connect(self, socket_name):
         connection_success = await self.hass.async_add_executor_job(
-            self.socket.connect,
+            self.sockets[socket_name].connect,
             self.host, self.port
         )
         if not connection_success:
-            return CONNECT_FAIL_NETWORK
+            return SETUP_FAIL_NETWORK
 
         login_transaction = await self.hass.async_add_executor_job(
-            self.socket.authenticate,
+            self.sockets[socket_name].authenticate,
             self.username, self.password
         )
 
         login_status = None
         while login_status == None:
-            self.socket.get_responses()
+            self.sockets[socket_name].get_responses()
             login_status = await self.hass.async_add_executor_job(
-                self.socket.get_transaction,
+                self.sockets[socket_name].get_transaction,
                 login_transaction
             )
 
         if RPC_ERROR in login_status:
-            return CONNECT_FAIL_AUTH
+            return SETUP_FAIL_AUTH
         else:
             try:
                 # Subscribe to energy events
@@ -82,49 +116,49 @@ class OneSmartWrapper():
                 # Fetch initial polling data
                 await self.update_cache()
             except:
-                return CONNECT_FAIL_NETWORK
+                return SETUP_FAIL_NETWORK
             finally:
 
-                return CONNECT_SUCCESS
+                return SETUP_SUCCESS
 
-    async def run(self):
-        last_ping = time()
-        
+    async def ensure_connected_socket(self, socket_name):
+        try:
+            # Make sure socket is connected. Reconnect if neccessary
+            if not self.sockets[socket_name].is_connected:
+                await self.connect()
 
+            # Keep the connection alive
+            if time() - self.sockets_last_ping[socket_name] > PING_INTERVAL:
+                ping_result = None
+                ping_result = await self.command_wait(socket_name, COMMAND_PING)
+
+                if ping_result == None:
+                    # Ping timed out, reconnect
+                    warning(f"Ping to server timed out. Reconnecting.")
+                    await self.connect()
+                self.sockets_last_ping[socket_name] = time()
+        except SOCKET_ERROR as e:
+            warning(f"Connection error on socket {socket_name}: '{e}' Reconnecting in {SOCKET_RECONNECT_DELAY} seconds.")
+            await sleep(SOCKET_RECONNECT_DELAY)
+            return await self.connect()
+        except Exception as e:
+            error(f"Unknown error while checking the connection: {e}")
+            return False
+        else:
+            return True
+
+
+    async def run_poll(self):
         # Loop through received data, blocked by socket.read
         while self.hass.state == CoreState.not_running or self.hass.is_running:
-            try:
-                # Make sure socket is connected. Reconnect if neccessary
-                if not self.socket.is_connected():
-                    await self.connect()
-
-                # Keep the connection alive
-                if time() - last_ping > PING_INTERVAL:
-                    ping_result = None
-                    ping_result = await self.command(COMMAND_PING)
-
-                    if ping_result == None:
-                        # Ping timed out, reconnect
-                        warning(f"Ping to server timed out. Reconnecting.")
-                        await self.connect()
-                    last_ping = time()
-            except SOCKET_ERROR as e:
-                warning(f"Connection error: '{e}' Reconnecting in {SOCKET_RECONNECT_DELAY} seconds.")
-                await sleep(SOCKET_RECONNECT_DELAY)
-                await self.connect()
-            except Exception as e:
-                error(f"Unknown error while checking the connection: {e}")
-        
+            await self.ensure_connected_socket(SOCKET_POLL)
+            socket = self.sockets[SOCKET_POLL]
             try:
                 # Read data from the socket
                 await self.hass.async_add_executor_job(
-                    self.socket.get_responses
+                    socket.get_responses
                 )
 
-                tasks = []
-                # Handle events (push updates)
-                await self.handle_events()
-                
                 # Update caches
                 await self.handle_update_flags()
 
@@ -136,16 +170,59 @@ class OneSmartWrapper():
 
         warning(f"Gateway wrapper exited.")
 
-    async def close(self):
-        await self.hass.async_add_executor_job(
-            self.socket.close
-        )
-        return not self.socket.is_connected
+    async def run_push(self):
 
-    async def command(self, command, **kwargs):
-        transaction_id = await self.hass.async_add_executor_job(
-            partial(self.socket.send_cmd, command, **kwargs)
+        # Loop through received data, blocked by socket.read
+        while self.hass.state == CoreState.not_running or self.hass.is_running:
+            await self.ensure_connected_socket(SOCKET_PUSH)
+            socket = self.sockets[SOCKET_PUSH]
+        
+            try:
+                await self.hass.async_add_executor_job(
+                    socket.get_responses
+                )
+                
+                # Read events
+                events = await self.hass.async_add_executor_job(
+                    socket.get_events
+                )
+                
+                # Handle events
+                for event in events:
+                    if event[RPC_EVENT] == EVENT_ENERGY_CONSUMPTION and len(self.cache[(COMMAND_METER,ACTION_LIST)]) > 0:
+                        for reading in event[RPC_DATA][RPC_VALUES]:
+                            meter_value = reading["value"]
+                            self.cache[EVENT_ENERGY_CONSUMPTION][reading["id"]] = meter_value
+                    elif event[RPC_EVENT] == EVENT_SITE_UPDATE:
+                        self.cache[EVENT_SITE_UPDATE] = event[RPC_DATA]
+
+                async_dispatcher_send(self.hass, ONESMART_UPDATE_PUSH)
+
+                # Send queued push commands
+                for queued_command in self.command_queue:
+                    self.command(SOCKET_PUSH, queued_command.pop("command"), kwargs = queued_command)
+
+
+            except Exception as e:
+                error(f"Error in { SOCKET_PUSH } gateway wrapper: { e }")
+
+        warning(f"Gateway wrapper exited ({ SOCKET_PUSH }).")
+
+    async def close(self):
+        for socket_name in self.sockets:
+            await self.hass.async_add_executor_job(
+                self.sockets[socket_name].close
+            )
+
+    """Send command to the socket and return the transaction id"""
+    async def command(self, socket_name, command, **kwargs) -> int:
+        return await self.hass.async_add_executor_job(
+            partial(self.sockets[socket_name].send_cmd, command, **kwargs)
         )
+
+    """Send command to the socket and return the transaction data"""
+    async def command_wait(self, socket_name, command, **kwargs):
+        transaction_id = await self.command(socket_name, command, **kwargs)
         # print("{} SEND {}".format(transaction_id, (command, kwargs)))
         # Wait for transaction to return
         transaction_done = False
@@ -156,11 +233,11 @@ class OneSmartWrapper():
                 return None
             # print("{} WAIT".format(transaction_id))
             await self.hass.async_add_executor_job(
-                self.socket.get_responses
+                self.sockets[socket_name].get_responses
             )
 
             transaction = await self.hass.async_add_executor_job(
-                self.socket.get_transaction, transaction_id
+                self.sockets[socket_name].get_transaction, transaction_id
             )
             transaction_done = transaction != None
         
@@ -169,7 +246,7 @@ class OneSmartWrapper():
 
     """Subscribe the socket to the specified event topics"""
     async def subscribe(self, topics: list):
-        return await self.command(command=COMMAND_EVENTS, action=ACTION_SUBSCRIBE, topics=topics)
+        return await self.command(socket_name=SOCKET_PUSH, command=COMMAND_EVENTS, action=ACTION_SUBSCRIBE, topics=topics)
 
     """Update id-name mappings"""
     async def update_definitions(self):
@@ -191,32 +268,29 @@ class OneSmartWrapper():
         for flag in self.update_flags:
             flag_command = flag[0]
             flag_action = flag[1]
-            
-            if flag_command in [COMMAND_SITE]:
-                # Fill cache with RPC result
-                transaction = await self.command(command=flag_command, action=flag_action)
-                self.cache[flag] = transaction[RPC_RESULT]
+
+            if flag_command in [COMMAND_SITE, COMMAND_METER, COMMAND_DEVICE, COMMAND_ENERGY]:
+                transaction = await self.command_wait(SOCKET_POLL, command=flag_command, action=flag_action)
 
                 if flag_command == COMMAND_SITE:
+                    # Fill cache with RPC result
+                    self.cache[flag] = transaction[RPC_RESULT]
+
                     # Also store in Site Event cache
                     self.cache[EVENT_SITE_UPDATE] = transaction[RPC_RESULT]
 
-                if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
-                    dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
+                    if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
+                        dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
 
-            elif flag_command in [COMMAND_METER]:
-                # Fill cache with RPC result (in corresponding subkey)
-                transaction = await self.command(command=flag_command, action=flag_action)
-                if flag_command == COMMAND_METER:
+                elif flag_command == COMMAND_METER:
+                    # Fill cache with RPC result (in corresponding subkey)
                     if RPC_METERS in transaction[RPC_RESULT]:
                         self.cache[flag] = transaction[RPC_RESULT][RPC_METERS]
 
-                if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
-                    dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
+                        if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
+                            dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
 
-            elif flag_command in [COMMAND_ENERGY, COMMAND_DEVICE]:
-                transaction = await self.command(command=flag_command, action = flag_action)
-                if flag_command == COMMAND_ENERGY:
+                elif flag_command == COMMAND_ENERGY:
                     if RPC_VALUES in transaction[RPC_RESULT]:
                         for entry in transaction[RPC_RESULT][RPC_VALUES]:
                             self.cache[flag][entry[RPC_ID]] = entry[RPC_VALUE]
@@ -229,13 +303,14 @@ class OneSmartWrapper():
                             self.cache[flag][entry[RPC_ID]] = entry
                         await self.discover_apparatus()
 
-                if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
-                    dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
+                        if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
+                            dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
 
             elif flag_command == COMMAND_APPARATUS:
                 if flag_action == ACTION_LIST:
                     for device_id in self.cache[(COMMAND_DEVICE, ACTION_LIST)]:
-                        transaction = await self.command(
+                        transaction = await self.command_wait(
+                            SOCKET_POLL,
                             command=flag_command, action=flag_action, 
                             id=device_id
                         )
@@ -251,7 +326,7 @@ class OneSmartWrapper():
             async_dispatcher_send(self.hass, topic)
         
     async def poll_apparatus(self):
-         # Update apparatus values
+        # Update apparatus values
         for device_id in self.device_apparatus_attributes:
             devices = self.cache[(COMMAND_DEVICE,ACTION_LIST)]
             device = devices[device_id]
@@ -279,7 +354,8 @@ class OneSmartWrapper():
 
             self.last_apparatus_index[device_id] = end_index
 
-            transaction = await self.command(
+            transaction = await self.command_wait(
+                SOCKET_POLL,
                 command=COMMAND_APPARATUS, action=ACTION_GET, 
                 id=device_id, attributes=split_attributes
             )
@@ -315,20 +391,6 @@ class OneSmartWrapper():
         else:
             return self.cache[cache_name]
 
-    async def handle_events(self):
-        events = await self.hass.async_add_executor_job(
-            self.socket.get_events
-        )
-        for event in events:
-            if event[RPC_EVENT] == EVENT_ENERGY_CONSUMPTION and len(self.cache[(COMMAND_METER,ACTION_LIST)]) > 0:
-                for reading in event[RPC_DATA][RPC_VALUES]:
-                    meter_value = reading["value"]
-                    self.cache[EVENT_ENERGY_CONSUMPTION][reading["id"]] = meter_value
-            if event[RPC_EVENT] == EVENT_SITE_UPDATE:
-                self.cache[EVENT_SITE_UPDATE] = event[RPC_DATA]
-
-        async_dispatcher_send(self.hass, ONESMART_UPDATE_PUSH)
-
     async def discover_apparatus(self):
         for device_id in self.cache[(COMMAND_DEVICE,ACTION_LIST)]:
             device = self.cache[(COMMAND_DEVICE,ACTION_LIST)][device_id]
@@ -336,7 +398,7 @@ class OneSmartWrapper():
                 continue
             self.device_apparatus_attributes[device_id] = dict()
 
-            transaction = await self.command(COMMAND_APPARATUS, action=ACTION_LIST, id=device_id)
+            transaction = await self.command_wait(SOCKET_POLL, COMMAND_APPARATUS, action=ACTION_LIST, id=device_id)
             attributes = transaction[RPC_RESULT][RPC_ATTRIBUTES]
 
             for attribute in attributes:
@@ -390,6 +452,8 @@ class OneSmartWrapper():
                             attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
 
+                        
+
                         elif "e_day" == attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
                             attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
@@ -414,4 +478,7 @@ class OneSmartWrapper():
 
     @property
     def is_connected(self):
-        return self.socket.is_connected()
+        for socket_name in self.sockets:
+            if not self.sockets[socket_name].is_connected:
+                return False
+        return True
