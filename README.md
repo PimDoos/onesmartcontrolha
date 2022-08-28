@@ -30,3 +30,4 @@ Supported device sensors:
 - Current
 - Frequency
 - Percentages
+- Mitsubishi Heatpump (via Procon ATW): Operation mode, flow rate, various diagnostic sensors
