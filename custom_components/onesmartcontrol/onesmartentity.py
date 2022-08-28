@@ -49,7 +49,6 @@ class OneSmartEntity(Entity):
         }
     @callback
     def update_from_latest_data(self):
-        #self.wrapper = self.hass.data[DOMAIN][ONESMART_WRAPPER]
         self.cache = self.wrapper.get_cache()
         
     def get_cache_value(self, key):

@@ -1,5 +1,6 @@
 """Read One Smart Control power and energy data"""
 from __future__ import annotations
+from typing import Coroutine
 from homeassistant.config_entries import ConfigEntry
 
 
