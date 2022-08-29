@@ -158,6 +158,7 @@ class OneSmartWrapper():
 
 
     async def run_poll(self):
+        await self.hass.async_block_till_done()
         socket_name = SOCKET_POLL
 
         # Loop through received data, blocked by socket.read
@@ -182,6 +183,7 @@ class OneSmartWrapper():
         warning(f"Gateway wrapper exited ({ socket_name }).")
 
     async def run_push(self):
+        await self.hass.async_block_till_done()
         socket_name = SOCKET_PUSH
 
         # Loop through received data, blocked by socket.read
