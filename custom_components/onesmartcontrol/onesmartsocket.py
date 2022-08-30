@@ -1,6 +1,7 @@
 """One Smart Control JSON-RPC Socket implementation"""
 from hashlib import sha1
 import json
+from logging import debug, info
 from select import select
 import socket
 import ssl
@@ -15,6 +16,8 @@ class OneSmartSocket:
         self._ssl_context.check_hostname = False
         self._ssl_context.verify_mode = ssl.CERT_NONE
 
+        self._raw_socket = None
+
         # Allow old ciphers
         self._ssl_context.set_ciphers('DEFAULT')
 
@@ -23,6 +26,12 @@ class OneSmartSocket:
         self._event_cache = []
 
     def connect(self, host, port):
+        if self._raw_socket:
+            try:
+                self._raw_socket.close()
+            except:
+                pass
+
         self._raw_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         self._ssl_socket = self._ssl_context.wrap_socket(self._raw_socket)
@@ -60,17 +69,21 @@ class OneSmartSocket:
 
     """Fetch outstanding responses and cache them by transaction ID"""
     def get_responses(self):
-        self._ssl_socket.setblocking(False)
-        data_available = select([self._ssl_socket],[],[], SOCKET_RECEIVE_TIMEOUT)
-        self._ssl_socket.setblocking(True)
-        if data_available[0]:
-
-            rpc_reply = bytes()
-        
-            # Stitch split packages
-            while len(rpc_reply) % SOCKET_BUFFER_SIZE == 0:
+        rpc_reply = bytes()
+    
+        # Stitch split packages
+        while len(rpc_reply) % SOCKET_BUFFER_SIZE == 0:
+            self._ssl_socket.setblocking(False)
+            data_available = select([self._ssl_socket],[],[], SOCKET_RECEIVE_TIMEOUT)
+            self._ssl_socket.setblocking(True)
+            if data_available[0]:
+                if len(rpc_reply) > SOCKET_BUFFER_SIZE:
+                    debug(f"Packet is { len(rpc_reply) } bytes, waiting for more")
                 rpc_reply += self._ssl_socket.recv(SOCKET_BUFFER_SIZE)
-            
+            else:
+                break
+                
+        if len(rpc_reply) > 0:
             reply = rpc_reply.decode()
             if(len(reply) > 8):
                 reply_data = json.loads(reply)
@@ -86,7 +99,11 @@ class OneSmartSocket:
 
     """Get the result of a cached transaction"""
     def get_transaction(self, transaction_id):
-        return self._response_cache.get(transaction_id, None)
+        if transaction_id in self._response_cache:
+            transaction = self._response_cache.pop(transaction_id)
+            return transaction
+        else:
+            return None
     
     """Return events and clear the cache"""
     def get_events(self):

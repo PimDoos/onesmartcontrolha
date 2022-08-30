@@ -53,12 +53,19 @@ class OneSmartEntity(Entity):
         
     def get_cache_value(self, key):
         value = self.cache[self._source]
-        for node in key.split("."):
-            try:
-                value = value[node]
-            except:
-                try:
-                    value = value[int(node)]
-                except:
+        
+        if len(value) == 0:
+            return None
+        else:
+            node: str
+            for node in key.split("."):
+                if node.isdigit():
+                    node = int(node)
+
+                if node in value:
+                    value = value[node]
+                    continue
+                else:
                     value = None
+
         return value
