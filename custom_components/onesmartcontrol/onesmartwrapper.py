@@ -85,12 +85,16 @@ class OneSmartWrapper():
         elif len(cache[(COMMAND_DEVICE,ACTION_LIST)]) == 0:
             return SETUP_FAIL_CACHE
 
-        self.runners.append(asyncio.create_task(
-            self.run_push()
-        ))
-        self.runners.append(asyncio.create_task(
-            self.run_poll()
-        ))
+        async def setup_runners(_event):
+            self.runners.append(asyncio.create_task(
+                self.run_push()
+            ))
+            self.runners.append(asyncio.create_task(
+                self.run_poll()
+            ))
+        self.hass.bus.async_listen_once(
+            EVENT_HOMEASSISTANT_STARTED, setup_runners
+        )
 
         return SETUP_SUCCESS
 
