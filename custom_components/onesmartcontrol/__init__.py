@@ -2,8 +2,6 @@
 from __future__ import annotations
 from datetime import timedelta
 import datetime
-import logging
-import asyncio
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform, CONF_USERNAME, CONF_PASSWORD, CONF_HOST, CONF_PORT
@@ -14,8 +12,6 @@ from homeassistant.helpers.event import async_track_time_interval
 
 from .const import *
 from .onesmartwrapper import OneSmartWrapper
-
-_LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
@@ -52,10 +48,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     async def update_definitions(event_time_utc: datetime):
-        await hass.data[DOMAIN][entry.entry_id][ONESMART_WRAPPER].update_definitions()
+        await wrapper.update_definitions()
 
     async def update_cache(event_time_utc: datetime):
-        await hass.data[DOMAIN][entry.entry_id][ONESMART_WRAPPER].update_cache()
+        await wrapper.update_cache()
 
     hass.data[DOMAIN][entry.entry_id][INTERVAL_TRACKER_DEFINITIONS] = async_track_time_interval(hass, update_definitions, scan_interval_definitions)
     hass.data[DOMAIN][entry.entry_id][INTERVAL_TRACKER_POLL] = async_track_time_interval(hass, update_cache, scan_interval_cache)
@@ -65,7 +61,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.config_entries.async_forward_entry_setup(entry, platform)
         )
     
-    print("One Smart Control is done with startup!")
     return True
 
 
