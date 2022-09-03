@@ -236,7 +236,7 @@ class OneSmartWrapper():
 
                 # Send queued push commands
                 for queued_command in self.command_queue:
-                    self.command(socket_name, queued_command.pop("command"), kwargs = queued_command)
+                    await self.command(socket_name, queued_command.pop("command"), kwargs = queued_command)
 
 
             except Exception as e:
