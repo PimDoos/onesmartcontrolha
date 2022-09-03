@@ -55,6 +55,10 @@ class OneSmartWrapper():
         self.cache[(COMMAND_DEVICE,ACTION_LIST)] = dict()
         self.cache[(COMMAND_APPARATUS,ACTION_GET)] = dict()
 
+        self.last_update = dict()
+        self.last_update[INTERVAL_TRACKER_POLL] = 0
+        self.last_update[INTERVAL_TRACKER_DEFINITIONS] = 0
+
         self.update_flags = []
         self.command_queue = []
 
@@ -68,12 +72,6 @@ class OneSmartWrapper():
             if connection_status != SETUP_SUCCESS:
                 return connection_status
         
-        # Set update flags
-        await self.update_definitions()
-        
-        # Wait for incoming data
-        await self.handle_update_flags()
-
         # Check cache
         cache = self.get_cache()
 
@@ -91,9 +89,12 @@ class OneSmartWrapper():
             self.runners.append(asyncio.create_task(
                 self.run_poll()
             ))
-        self.hass.bus.async_listen_once(
-            EVENT_HOMEASSISTANT_STARTED, setup_runners
-        )
+        if self.hass.state != CoreState.running:
+            self.hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED, setup_runners
+            )
+        else:
+            await setup_runners(None)
 
         return SETUP_SUCCESS
 
@@ -123,7 +124,9 @@ class OneSmartWrapper():
         try:
             async with self.timeout.async_timeout(SOCKET_AUTHENTICATION_TIMEOUT):
                 while login_status == None:
-                    self.sockets[socket_name].get_responses()
+                    await self.hass.async_add_executor_job(
+                        self.sockets[socket_name].get_responses
+                    )
                     login_status = await self.hass.async_add_executor_job(
                         self.sockets[socket_name].get_transaction,
                         login_transaction
@@ -144,8 +147,17 @@ class OneSmartWrapper():
                     # Subscribe to energy events
                     await self.subscribe(topics=[TOPIC_ENERGY, TOPIC_SITE])
                 elif socket_name == SOCKET_POLL:
-                    # Fetch initial polling data
-                    await self.update_cache()
+                    # Set update flags
+                    self.set_update_flag((COMMAND_SITE,ACTION_GET))
+                    self.set_update_flag((COMMAND_METER,ACTION_LIST))
+                    self.set_update_flag((COMMAND_DEVICE,ACTION_LIST))
+                    self.last_update[INTERVAL_TRACKER_DEFINITIONS] = time()
+
+                    self.set_update_flag((COMMAND_ENERGY,ACTION_TOTAL))
+                    self.last_update[INTERVAL_TRACKER_POLL] = time()
+                    
+                    # Wait for incoming data
+                    await self.handle_update_flags()
             except:
                 return SETUP_FAIL_NETWORK
             else:
@@ -156,7 +168,10 @@ class OneSmartWrapper():
             try:
                 # Check if socket status is connected
                 if not self.sockets[socket_name].is_connected:
-                    await self.connect(socket_name)
+                    connection_status = await self.connect(socket_name)
+                    if not connection_status == SETUP_SUCCESS:
+                        warning(f"Reconnect failed. Trying again in {SOCKET_RECONNECT_DELAY} seconds. Attempt { connect_attempt + 1} of { SOCKET_RECONNECT_RETRIES }.")
+                        await asyncio.sleep(SOCKET_RECONNECT_DELAY)
                     continue
 
                 # Try ping
@@ -168,7 +183,7 @@ class OneSmartWrapper():
                     continue
 
             except SOCKET_ERROR as e:
-                warning(f"Connection error on socket {socket_name}: '{e}' Reconnecting in {SOCKET_RECONNECT_DELAY} seconds. Attempt { connect_attempt } of { SOCKET_RECONNECT_RETRIES }.")
+                warning(f"Connection error on socket {socket_name}: '{e}' Reconnecting in {SOCKET_RECONNECT_DELAY} seconds. Attempt { connect_attempt + 1 } of { SOCKET_RECONNECT_RETRIES }.")
                 await asyncio.sleep(SOCKET_RECONNECT_DELAY)
                 continue
             except Exception as e:
@@ -176,7 +191,7 @@ class OneSmartWrapper():
             else:
                 return
 
-        error(f"Reconnect failed after { connect_attempt } attempts.")
+        error(f"Reconnect failed after { SOCKET_RECONNECT_RETRIES } attempts.")
 
     async def run_poll(self) -> None:
         await self.hass.async_block_till_done()
@@ -193,6 +208,16 @@ class OneSmartWrapper():
                 )
 
                 # Update caches
+                if time() > self.last_update[INTERVAL_TRACKER_DEFINITIONS] + SCAN_INTERVAL_DEFINITIONS:
+                    self.set_update_flag((COMMAND_SITE,ACTION_GET))
+                    self.set_update_flag((COMMAND_METER,ACTION_LIST))
+                    self.set_update_flag((COMMAND_DEVICE,ACTION_LIST))
+                    self.last_update[INTERVAL_TRACKER_DEFINITIONS] = time()
+        
+                if time() > self.last_update[INTERVAL_TRACKER_POLL] + SCAN_INTERVAL_CACHE:
+                    self.set_update_flag((COMMAND_ENERGY,ACTION_TOTAL))
+                    self.last_update[INTERVAL_TRACKER_POLL] = time()
+                
                 await self.handle_update_flags()
 
                 # Update apparatus attributes
@@ -287,15 +312,6 @@ class OneSmartWrapper():
     async def subscribe(self, topics: list):
         return await self.command(socket_name=SOCKET_PUSH, command=COMMAND_EVENTS, action=ACTION_SUBSCRIBE, topics=topics)
 
-    """Update id-name mappings"""
-    async def update_definitions(self):
-        self.set_update_flag((COMMAND_SITE,ACTION_GET))
-        self.set_update_flag((COMMAND_METER,ACTION_LIST))
-        self.set_update_flag((COMMAND_DEVICE,ACTION_LIST))
-        
-    """Update polling cache"""
-    async def update_cache(self):
-        self.set_update_flag((COMMAND_ENERGY,ACTION_TOTAL))
 
     def set_update_flag(self, flag):
         self.update_flags.append(flag)
@@ -310,35 +326,43 @@ class OneSmartWrapper():
 
             if flag_command in [COMMAND_SITE, COMMAND_METER, COMMAND_DEVICE, COMMAND_ENERGY]:
                 transaction = await self.command_wait(SOCKET_POLL, command=flag_command, action=flag_action)
+                if transaction == None:
+                    # Skip if transaction returns no data.
+                    continue
+                elif not RPC_RESULT in transaction:
+                    # TODO: Set depending sensors to unavailable
+                    continue
+                else:
+                    transaction_result = transaction[RPC_RESULT]
 
                 if flag_command == COMMAND_SITE:
                     # Fill cache with RPC result
-                    self.cache[flag] = transaction[RPC_RESULT]
+                    self.cache[flag] = transaction_result
 
                     # Also store in Site Event cache
-                    self.cache[EVENT_SITE_UPDATE] = transaction[RPC_RESULT]
+                    self.cache[EVENT_SITE_UPDATE] = transaction_result
 
                     if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
                         dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
 
                 elif flag_command == COMMAND_METER:
                     # Fill cache with RPC result (in corresponding subkey)
-                    if RPC_METERS in transaction[RPC_RESULT]:
-                        self.cache[flag] = transaction[RPC_RESULT][RPC_METERS]
+                    if RPC_METERS in transaction_result:
+                        self.cache[flag] = transaction_result[RPC_METERS]
 
                         if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
                             dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
 
                 elif flag_command == COMMAND_ENERGY:
-                    if RPC_VALUES in transaction[RPC_RESULT]:
-                        for entry in transaction[RPC_RESULT][RPC_VALUES]:
+                    if RPC_VALUES in transaction_result:
+                        for entry in transaction_result[RPC_VALUES]:
                             self.cache[flag][entry[RPC_ID]] = entry[RPC_VALUE]
 
                         if not ONESMART_UPDATE_POLL in dispatcher_topics:
                             dispatcher_topics.append(ONESMART_UPDATE_POLL)
                 elif flag_command == COMMAND_DEVICE:
-                    if RPC_DEVICES in transaction[RPC_RESULT]:
-                        for entry in transaction[RPC_RESULT][RPC_DEVICES]:
+                    if RPC_DEVICES in transaction_result:
+                        for entry in transaction_result[RPC_DEVICES]:
                             self.cache[flag][entry[RPC_ID]] = entry
                         await self.discover_apparatus()
 
@@ -353,7 +377,11 @@ class OneSmartWrapper():
                             command=flag_command, action=flag_action, 
                             id=device_id
                         )
-                        if not RPC_ATTRIBUTES in transaction[RPC_RESULT]:
+                        if transaction is None:
+                            self.cache[flag] = None
+                        elif not RPC_RESULT in transaction:
+                            self.cache[flag] = None
+                        elif not RPC_ATTRIBUTES in transaction[RPC_RESULT]:
                             self.cache[flag] = None
                         else:
                             self.cache[flag] = transaction[RPC_RESULT][RPC_ATTRIBUTES]
@@ -393,6 +421,7 @@ class OneSmartWrapper():
 
             self.last_apparatus_index[device_id] = end_index
 
+            await self.ensure_connected_socket(SOCKET_POLL)
             transaction = await self.command_wait(
                 SOCKET_POLL,
                 command=COMMAND_APPARATUS, action=ACTION_GET, 
@@ -413,7 +442,7 @@ class OneSmartWrapper():
                             if bit_length >= BIT_LENGTH_DOUBLE - 4:
                                 values_new[value_name] = struct.unpack("<d",value.to_bytes(8,byteorder="little", signed=True))[0]
                                 if values_new[value_name] < 1:
-                                    values_new[value_name] = 0 
+                                    values_new[value_name] = 0
 
                     if device_id in self.cache[(COMMAND_APPARATUS,ACTION_GET)]:
                         values_cache = self.cache[(COMMAND_APPARATUS,ACTION_GET)][device_id]

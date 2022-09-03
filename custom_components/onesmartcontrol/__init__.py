@@ -40,22 +40,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     elif wrapper_status != SETUP_SUCCESS:
         raise ConfigEntryNotReady  
 
-    scan_interval_definitions = timedelta(
-        seconds = SCAN_INTERVAL_DEFINITIONS
-    )
-    scan_interval_cache = timedelta(
-        seconds = SCAN_INTERVAL_CACHE
-    )
-
-    async def update_definitions(event_time_utc: datetime):
-        await wrapper.update_definitions()
-
-    async def update_cache(event_time_utc: datetime):
-        await wrapper.update_cache()
-
-    hass.data[DOMAIN][entry.entry_id][INTERVAL_TRACKER_DEFINITIONS] = async_track_time_interval(hass, update_definitions, scan_interval_definitions)
-    hass.data[DOMAIN][entry.entry_id][INTERVAL_TRACKER_POLL] = async_track_time_interval(hass, update_cache, scan_interval_cache)
-
     for platform in PLATFORMS:
         hass.async_create_task(
             hass.config_entries.async_forward_entry_setup(entry, platform)
