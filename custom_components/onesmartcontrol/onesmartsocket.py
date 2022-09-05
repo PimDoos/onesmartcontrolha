@@ -5,7 +5,8 @@ from logging import debug, info
 from select import select
 import socket
 import ssl
-from .const import *
+import threading
+from const import *
 
 
 class OneSmartSocket:
@@ -69,6 +70,7 @@ class OneSmartSocket:
 
     """Fetch outstanding responses and cache them by transaction ID"""
     def get_responses(self):
+        debug(f"OSC get_responses was called from thread { threading.get_ident() }")
         rpc_reply = bytes()
     
         # Stitch split packages
@@ -80,22 +82,24 @@ class OneSmartSocket:
                 if len(rpc_reply) > SOCKET_BUFFER_SIZE:
                     debug(f"Packet is { len(rpc_reply) } bytes, waiting for more")
                 rpc_reply += self._ssl_socket.recv(SOCKET_BUFFER_SIZE)
+                if len(rpc_reply) == 0:
+                    # Nothing received, socket might be dead. Move on
+                    break
             else:
                 break
                 
-        if len(rpc_reply) > 0:
+        if len(rpc_reply) > 8:
             reply = rpc_reply.decode()
-            if(len(reply) > 8):
-                reply_data = json.loads(reply)
-                if not reply_data == None:
-                    if RPC_TRANSACTION in reply_data:
-                        # Received message is a transaction response
-                        transaction_id = reply_data[RPC_TRANSACTION]
-                        self._response_cache[transaction_id] = reply_data
-                        
-                    else:
-                        # Message is not part of a transaction. Add to eventqueue.
-                        self._event_cache.append(reply_data)
+            reply_data = json.loads(reply)
+            if not reply_data == None:
+                if RPC_TRANSACTION in reply_data:
+                    # Received message is a transaction response
+                    transaction_id = reply_data[RPC_TRANSACTION]
+                    self._response_cache[transaction_id] = reply_data
+                    
+                else:
+                    # Message is not part of a transaction. Add to eventqueue.
+                    self._event_cache.append(reply_data)
 
     """Get the result of a cached transaction"""
     def get_transaction(self, transaction_id):
