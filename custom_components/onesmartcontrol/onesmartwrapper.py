@@ -1,11 +1,13 @@
 import asyncio
-from logging import error, warning
+import logging
 import struct
 from homeassistant.core import HomeAssistant, CoreState
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util.timeout import TimeoutManager
 from functools import partial
 from socket import error as SOCKET_ERROR
+
+_LOGGER = logging.getLogger(__name__)
 
 from homeassistant.const import (
     EVENT_HOMEASSISTANT_STARTED,
@@ -106,11 +108,13 @@ class OneSmartWrapper():
                     self.host, self.port
                 )
         except asyncio.TimeoutError:
-            warning(f"Connection timeout out after { SOCKET_CONNECTION_TIMEOUT } seconds")
+            _LOGGER.warning(f"Connection timeout out after { SOCKET_CONNECTION_TIMEOUT } seconds")
             return SETUP_FAIL_NETWORK
         except SOCKET_ERROR as e:
-            warning(f"Connection error: { e }")
+            _LOGGER.warning(f"Connection error: { e }")
             return SETUP_FAIL_NETWORK
+        else:
+            _LOGGER.info(f"Socket { socket_name }: Established network connection")
         
         if not connection_success:
             return SETUP_FAIL_NETWORK
@@ -132,11 +136,13 @@ class OneSmartWrapper():
                         login_transaction
                     )
         except asyncio.TimeoutError:
-            warning(f"Authentication timeout out after { SOCKET_AUTHENTICATION_TIMEOUT } seconds")
+            _LOGGER.warning(f"Authentication timeout out after { SOCKET_AUTHENTICATION_TIMEOUT } seconds")
             return SETUP_FAIL_AUTH
         except Exception as e:
-            warning(f"Authentication error: { e }")
+            _LOGGER.warning(f"Authentication error: { e }")
             return SETUP_FAIL_AUTH
+        else:
+            _LOGGER.info(f"Socket { socket_name }: Authentication successful")
         
 
         if RPC_ERROR in login_status:
@@ -170,28 +176,31 @@ class OneSmartWrapper():
                 if not self.sockets[socket_name].is_connected:
                     connection_status = await self.connect(socket_name)
                     if not connection_status == SETUP_SUCCESS:
-                        warning(f"Reconnect failed. Trying again in {SOCKET_RECONNECT_DELAY} seconds. Attempt { connect_attempt + 1} of { SOCKET_RECONNECT_RETRIES }.")
+                        _LOGGER.warning(f"Reconnect failed. Trying again in {SOCKET_RECONNECT_DELAY} seconds. Attempt { connect_attempt + 1} of { SOCKET_RECONNECT_RETRIES }.")
                         await asyncio.sleep(SOCKET_RECONNECT_DELAY)
+                    else:
+                        _LOGGER.info(f"Socket { socket_name } successfully reconnected after { connect_attempt + 1 } attempts.")
                     continue
 
                 # Try ping
                 ping_result = await self.command_wait(socket_name, COMMAND_PING)
 
                 if ping_result == None:
-                    warning(f"Ping to server timed out. Reconnecting.")
+                    _LOGGER.warning(f"Ping to server timed out. Reconnecting.")
                     await self.connect(socket_name)
                     continue
 
             except SOCKET_ERROR as e:
-                warning(f"Connection error on socket {socket_name}: '{e}' Reconnecting in {SOCKET_RECONNECT_DELAY} seconds. Attempt { connect_attempt + 1 } of { SOCKET_RECONNECT_RETRIES }.")
+                _LOGGER.warning(f"Connection error on socket {socket_name}: '{e}' Reconnecting in {SOCKET_RECONNECT_DELAY} seconds. Attempt { connect_attempt + 1 } of { SOCKET_RECONNECT_RETRIES }.")
                 await asyncio.sleep(SOCKET_RECONNECT_DELAY)
                 continue
             except Exception as e:
-                error(f"Unknown error while checking the connection: {e}")
+                _LOGGER.error(f"Unknown error while checking the connection: {e}")
             else:
+                # Connection successful
                 return
 
-        error(f"Reconnect failed after { SOCKET_RECONNECT_RETRIES } attempts.")
+        _LOGGER.error(f"Reconnect failed after { SOCKET_RECONNECT_RETRIES } attempts.")
 
     async def run_poll(self) -> None:
         await self.hass.async_block_till_done()
@@ -213,10 +222,12 @@ class OneSmartWrapper():
                     self.set_update_flag((COMMAND_METER,ACTION_LIST))
                     self.set_update_flag((COMMAND_DEVICE,ACTION_LIST))
                     self.last_update[INTERVAL_TRACKER_DEFINITIONS] = time()
-        
+                    _LOGGER.info(f"Updating definitions")
+
                 if time() > self.last_update[INTERVAL_TRACKER_POLL] + SCAN_INTERVAL_CACHE:
                     self.set_update_flag((COMMAND_ENERGY,ACTION_TOTAL))
                     self.last_update[INTERVAL_TRACKER_POLL] = time()
+                    _LOGGER.info(f"Updating cache") 
                 
                 await self.handle_update_flags()
 
@@ -224,9 +235,9 @@ class OneSmartWrapper():
                 await self.poll_apparatus()
 
             except Exception as e:
-                error(f"Error in { socket_name } gateway wrapper: { e }")
+                _LOGGER.error(f"Error in { socket_name } gateway wrapper: { e }")
 
-        warning(f"Gateway wrapper exited ({ socket_name }).")
+        _LOGGER.warning(f"Gateway wrapper exited ({ socket_name }).")
 
     async def run_push(self) -> None:
         await self.hass.async_block_till_done()
@@ -265,9 +276,9 @@ class OneSmartWrapper():
 
 
             except Exception as e:
-                error(f"Error in { socket_name } gateway wrapper: { e }")
+                _LOGGER.error(f"Error in { socket_name } gateway wrapper: { e }")
 
-        warning(f"Gateway wrapper exited ({ socket_name }).")
+        _LOGGER.warning(f"Gateway wrapper exited ({ socket_name }).")
 
     async def close(self):
         for task in self.runners:
@@ -303,7 +314,7 @@ class OneSmartWrapper():
                     )
                     transaction_done = transaction != None
         except asyncio.TimeoutError:
-            warning(f"Command timed out after {SOCKET_COMMAND_TIMEOUT} seconds: { command }")
+            _LOGGER.warning(f"Command timed out after {SOCKET_COMMAND_TIMEOUT} seconds: { command }")
             return None
         else:
             return transaction
@@ -428,10 +439,10 @@ class OneSmartWrapper():
                 id=device_id, attributes=split_attributes
             )
             if transaction == None:
-                warning(f"Could not update '{split_attributes}' for '{device_name}': Timed out")
+                _LOGGER.warning(f"Could not update '{split_attributes}' for '{device_name}': Timed out")
                 continue
             if RPC_ERROR in transaction[RPC_RESULT]:
-                warning(f"Could not update '{split_attributes}' for '{device_name}': {transaction[RPC_RESULT]}")
+                _LOGGER.warning(f"Could not update '{split_attributes}' for '{device_name}': {transaction[RPC_RESULT]}")
             else:
                 try:
                     values_new = transaction[RPC_RESULT][RPC_ATTRIBUTES]
@@ -450,7 +461,7 @@ class OneSmartWrapper():
                         values_cache = {}
                     self.cache[(COMMAND_APPARATUS,ACTION_GET)][device_id] = values_cache | values_new
                 except Exception as e:
-                    warning(f"Could not update '{split_attributes}' for '{device_name}': { e } ''")
+                    _LOGGER.warning(f"Could not update '{split_attributes}' for '{device_name}': { e } ''")
             
         async_dispatcher_send(self.hass, ONESMART_UPDATE_APPARATUS)
 
