@@ -6,7 +6,7 @@ from select import select
 import socket
 import ssl
 import threading
-from const import *
+from .const import *
 
 
 class OneSmartSocket:
