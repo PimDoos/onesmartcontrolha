@@ -1,13 +1,14 @@
 """One Smart Control JSON-RPC Socket implementation"""
 from hashlib import sha1
 import json
-from logging import debug, info
+import logging
 from select import select
 import socket
 import ssl
 import threading
 from .const import *
 
+_LOGGER = logging.getLogger(__name__)
 
 class OneSmartSocket:
 
@@ -45,11 +46,18 @@ class OneSmartSocket:
         return self.send_cmd(command=COMMAND_AUTHENTICATE, username=username, password=password_hash)
 
     def close(self):
+        try:
+            self._ssl_socket.unwrap()
+        except ssl.SSLEOFError:
+            pass
+        
         self._ssl_socket.close()
 
     @property
     def is_connected(self):
         if self._ssl_socket.get_channel_binding() == None:
+            return False
+        elif self._ssl_socket.fileno() == -1:
             return False
         else:
             return True
@@ -70,7 +78,6 @@ class OneSmartSocket:
 
     """Fetch outstanding responses and cache them by transaction ID"""
     def get_responses(self):
-        debug(f"OSC get_responses was called from thread { threading.get_ident() }")
         rpc_reply = bytes()
     
         # Stitch split packages
@@ -80,10 +87,12 @@ class OneSmartSocket:
             self._ssl_socket.setblocking(True)
             if data_available[0]:
                 if len(rpc_reply) > SOCKET_BUFFER_SIZE:
-                    debug(f"Packet is { len(rpc_reply) } bytes, waiting for more")
+                    _LOGGER.debug(f"Packet is { len(rpc_reply) } bytes, waiting for more")
                 rpc_reply += self._ssl_socket.recv(SOCKET_BUFFER_SIZE)
                 if len(rpc_reply) == 0:
-                    # Nothing received, socket might be dead. Move on
+                    # Socket is EOF. Close socket.
+                    _LOGGER.info("Socket was closed (EOF)")
+                    self.close()
                     break
             else:
                 break
