@@ -4,7 +4,6 @@ import struct
 from homeassistant.core import HomeAssistant, CoreState
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util.timeout import TimeoutManager
-from functools import partial
 from socket import error as SOCKET_ERROR
 
 _LOGGER = logging.getLogger(__name__)
@@ -101,12 +100,10 @@ class OneSmartWrapper():
         return SETUP_SUCCESS
 
     async def connect(self, socket_name):
+        socket = self.sockets[socket_name]
         try:
             async with self.timeout.async_timeout(SOCKET_CONNECTION_TIMEOUT):
-                connection_success = await self.hass.async_add_executor_job(
-                    self.sockets[socket_name].connect,
-                    self.host, self.port
-                )
+                connection_success = await socket.connect(self.host, self.port)
         except asyncio.TimeoutError:
             _LOGGER.warning(f"Connection timeout out after { SOCKET_CONNECTION_TIMEOUT } seconds")
             return SETUP_FAIL_NETWORK
@@ -119,22 +116,14 @@ class OneSmartWrapper():
         if not connection_success:
             return SETUP_FAIL_NETWORK
 
-        login_transaction = await self.hass.async_add_executor_job(
-            self.sockets[socket_name].authenticate,
-            self.username, self.password
-        )
+        login_transaction = await socket.authenticate(self.username, self.password)
 
         login_status = None
         try:
             async with self.timeout.async_timeout(SOCKET_AUTHENTICATION_TIMEOUT):
                 while login_status == None:
-                    await self.hass.async_add_executor_job(
-                        self.sockets[socket_name].get_responses
-                    )
-                    login_status = await self.hass.async_add_executor_job(
-                        self.sockets[socket_name].get_transaction,
-                        login_transaction
-                    )
+                    await socket.get_responses()
+                    login_status = socket.get_transaction(login_transaction)
         except asyncio.TimeoutError:
             _LOGGER.warning(f"Authentication timeout out after { SOCKET_AUTHENTICATION_TIMEOUT } seconds")
             return SETUP_FAIL_AUTH
@@ -212,9 +201,7 @@ class OneSmartWrapper():
             socket = self.sockets[socket_name]
             try:
                 # Read data from the socket
-                await self.hass.async_add_executor_job(
-                    socket.get_responses
-                )
+                await socket.get_responses()
 
                 # Update caches
                 if time() > self.last_update[INTERVAL_TRACKER_DEFINITIONS] + SCAN_INTERVAL_DEFINITIONS:
@@ -250,14 +237,10 @@ class OneSmartWrapper():
             socket = self.sockets[socket_name]
         
             try:
-                await self.hass.async_add_executor_job(
-                    socket.get_responses
-                )
+                await socket.get_responses()
                 
                 # Read events
-                events = await self.hass.async_add_executor_job(
-                    socket.get_events
-                )
+                events = socket.get_events()
                 
                 # Handle events
                 for event in events:
@@ -285,16 +268,13 @@ class OneSmartWrapper():
             task.cancel()
 
         for socket_name in self.sockets:
-            await self.hass.async_add_executor_job(
-                self.sockets[socket_name].close
-            )
+            await self.sockets[socket_name].close()
         
 
     """Send command to the socket and return the transaction id"""
     async def command(self, socket_name, command, **kwargs) -> int:
-        return await self.hass.async_add_executor_job(
-            partial(self.sockets[socket_name].send_cmd, command, **kwargs)
-        )
+        socket = self.sockets[socket_name]
+        return await socket.send_cmd(command, **kwargs)
 
     """Send command to the socket and return the transaction data"""
     async def command_wait(self, socket_name, command, **kwargs):
@@ -305,14 +285,11 @@ class OneSmartWrapper():
         try:
             async with self.timeout.async_timeout(SOCKET_COMMAND_TIMEOUT):
                 while not transaction_done:
-                    await self.hass.async_add_executor_job(
-                        self.sockets[socket_name].get_responses
-                    )
-
-                    transaction = await self.hass.async_add_executor_job(
-                        self.sockets[socket_name].get_transaction, transaction_id
-                    )
+                    await self.sockets[socket_name].get_responses()
+                    transaction = self.sockets[socket_name].get_transaction(transaction_id)
                     transaction_done = transaction != None
+                    await asyncio.sleep(0)
+
         except asyncio.TimeoutError:
             _LOGGER.warning(f"Command timed out after {SOCKET_COMMAND_TIMEOUT} seconds: { command }")
             return None
