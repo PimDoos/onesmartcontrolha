@@ -93,8 +93,9 @@ class OneSmartSocket:
             else:
                 data += read_bytes
                 done_reading = True
+        messages = data.split(b"\r\n")
         
-        for message_bytes in data.split(b"\r\n"):
+        for message_bytes in messages:
             if len(message_bytes) > 8:
                 reply = message_bytes.decode()
                 try:

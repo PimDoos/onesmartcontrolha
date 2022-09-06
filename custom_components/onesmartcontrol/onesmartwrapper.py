@@ -198,11 +198,7 @@ class OneSmartWrapper():
         # Loop through received data, blocked by socket.read
         while self.hass.state == CoreState.not_running or self.hass.is_running:
             await self.ensure_connected_socket(socket_name)
-            socket = self.sockets[socket_name]
             try:
-                # Read data from the socket
-                await socket.get_responses()
-
                 # Update caches
                 if time() > self.last_update[INTERVAL_TRACKER_DEFINITIONS] + SCAN_INTERVAL_DEFINITIONS:
                     self.set_update_flag((COMMAND_SITE,ACTION_GET))
@@ -288,7 +284,6 @@ class OneSmartWrapper():
                     await self.sockets[socket_name].get_responses()
                     transaction = self.sockets[socket_name].get_transaction(transaction_id)
                     transaction_done = transaction != None
-                    await asyncio.sleep(0)
 
         except asyncio.TimeoutError:
             _LOGGER.warning(f"Command timed out after {SOCKET_COMMAND_TIMEOUT} seconds: { command }")

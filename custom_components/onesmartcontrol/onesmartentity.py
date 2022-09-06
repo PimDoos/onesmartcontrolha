@@ -61,8 +61,9 @@ class OneSmartEntity(Entity):
             for node in key.split("."):
                 if node.isdigit():
                     node = int(node)
-
-                if node in value:
+                if value == None:
+                    return None
+                elif node in value:
                     value = value[node]
                     continue
                 else:
