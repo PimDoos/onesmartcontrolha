@@ -158,6 +158,7 @@ class OneSmartWrapper():
             else:
                 return SETUP_SUCCESS
 
+    """Make sure the selected socket object is connected"""
     async def ensure_connected_socket(self, socket_name):
         for connect_attempt in range(0, SOCKET_RECONNECT_RETRIES):
             try:
@@ -191,6 +192,7 @@ class OneSmartWrapper():
 
         _LOGGER.error(f"Reconnect failed after { SOCKET_RECONNECT_RETRIES } attempts.")
 
+    """Runner for the POLL channel"""
     async def run_poll(self) -> None:
         await self.hass.async_block_till_done()
         socket_name = SOCKET_POLL
@@ -201,16 +203,18 @@ class OneSmartWrapper():
             try:
                 # Update caches
                 if time() > self.last_update[INTERVAL_TRACKER_DEFINITIONS] + SCAN_INTERVAL_DEFINITIONS:
+                    _LOGGER.info(f"Updating definitions")
                     self.set_update_flag((COMMAND_SITE,ACTION_GET))
                     self.set_update_flag((COMMAND_METER,ACTION_LIST))
                     self.set_update_flag((COMMAND_DEVICE,ACTION_LIST))
                     self.last_update[INTERVAL_TRACKER_DEFINITIONS] = time()
-                    _LOGGER.info(f"Updating definitions")
+                    
 
                 if time() > self.last_update[INTERVAL_TRACKER_POLL] + SCAN_INTERVAL_CACHE:
+                    _LOGGER.info(f"Updating cache") 
                     self.set_update_flag((COMMAND_ENERGY,ACTION_TOTAL))
                     self.last_update[INTERVAL_TRACKER_POLL] = time()
-                    _LOGGER.info(f"Updating cache") 
+                    
                 
                 await self.handle_update_flags()
 
@@ -222,12 +226,12 @@ class OneSmartWrapper():
 
         _LOGGER.warning(f"Gateway wrapper exited ({ socket_name }).")
 
+    """Runner for the PUSH channel"""
     async def run_push(self) -> None:
         await self.hass.async_block_till_done()
 
         socket_name = SOCKET_PUSH
 
-        # Loop through received data, blocked by socket.read
         while self.hass.state == CoreState.not_running or self.hass.is_running:
             await self.ensure_connected_socket(socket_name)
             socket = self.sockets[socket_name]
@@ -259,6 +263,7 @@ class OneSmartWrapper():
 
         _LOGGER.warning(f"Gateway wrapper exited ({ socket_name }).")
 
+    """Shut down the wrapper"""
     async def close(self):
         for task in self.runners:
             task.cancel()
@@ -286,7 +291,7 @@ class OneSmartWrapper():
                     transaction_done = transaction != None
 
         except asyncio.TimeoutError:
-            _LOGGER.warning(f"Command timed out after {SOCKET_COMMAND_TIMEOUT} seconds: { command }")
+            _LOGGER.warning(f"Command on socket { socket_name } timed out after {SOCKET_COMMAND_TIMEOUT} seconds: { command }")
             return None
         else:
             return transaction
@@ -303,72 +308,77 @@ class OneSmartWrapper():
         dispatcher_topics = []
 
         # Handle update flags
+        if len(self.update_flags) > 0:
+            _LOGGER.info(f"Handling { len(self.update_flags) } update flags: { self.update_flags }")
         for flag in self.update_flags:
-            flag_command = flag[0]
-            flag_action = flag[1]
+            try:
+                flag_command = flag[0]
+                flag_action = flag[1]
 
-            if flag_command in [COMMAND_SITE, COMMAND_METER, COMMAND_DEVICE, COMMAND_ENERGY]:
-                transaction = await self.command_wait(SOCKET_POLL, command=flag_command, action=flag_action)
-                if transaction == None:
-                    # Skip if transaction returns no data.
-                    continue
-                elif not RPC_RESULT in transaction:
-                    # TODO: Set depending sensors to unavailable
-                    continue
-                else:
-                    transaction_result = transaction[RPC_RESULT]
+                if flag_command in [COMMAND_SITE, COMMAND_METER, COMMAND_DEVICE, COMMAND_ENERGY]:
+                    transaction = await self.command_wait(SOCKET_POLL, command=flag_command, action=flag_action)
+                    if transaction == None:
+                        # Skip if transaction returns no data.
+                        continue
+                    elif not RPC_RESULT in transaction:
+                        # TODO: Set depending sensors to unavailable
+                        continue
+                    else:
+                        transaction_result = transaction[RPC_RESULT]
 
-                if flag_command == COMMAND_SITE:
-                    # Fill cache with RPC result
-                    self.cache[flag] = transaction_result
+                    if flag_command == COMMAND_SITE:
+                        # Fill cache with RPC result
+                        self.cache[flag] = transaction_result
 
-                    # Also store in Site Event cache
-                    self.cache[EVENT_SITE_UPDATE] = transaction_result
-
-                    if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
-                        dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
-
-                elif flag_command == COMMAND_METER:
-                    # Fill cache with RPC result (in corresponding subkey)
-                    if RPC_METERS in transaction_result:
-                        self.cache[flag] = transaction_result[RPC_METERS]
+                        # Also store in Site Event cache
+                        self.cache[EVENT_SITE_UPDATE] = transaction_result
 
                         if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
                             dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
 
-                elif flag_command == COMMAND_ENERGY:
-                    if RPC_VALUES in transaction_result:
-                        for entry in transaction_result[RPC_VALUES]:
-                            self.cache[flag][entry[RPC_ID]] = entry[RPC_VALUE]
+                    elif flag_command == COMMAND_METER:
+                        # Fill cache with RPC result (in corresponding subkey)
+                        if RPC_METERS in transaction_result:
+                            self.cache[flag] = transaction_result[RPC_METERS]
 
-                        if not ONESMART_UPDATE_POLL in dispatcher_topics:
-                            dispatcher_topics.append(ONESMART_UPDATE_POLL)
-                elif flag_command == COMMAND_DEVICE:
-                    if RPC_DEVICES in transaction_result:
-                        for entry in transaction_result[RPC_DEVICES]:
-                            self.cache[flag][entry[RPC_ID]] = entry
-                        await self.discover_apparatus()
+                            if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
+                                dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
 
-                        if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
-                            dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
+                    elif flag_command == COMMAND_ENERGY:
+                        if RPC_VALUES in transaction_result:
+                            for entry in transaction_result[RPC_VALUES]:
+                                self.cache[flag][entry[RPC_ID]] = entry[RPC_VALUE]
 
-            elif flag_command == COMMAND_APPARATUS:
-                if flag_action == ACTION_LIST:
-                    for device_id in self.cache[(COMMAND_DEVICE, ACTION_LIST)]:
-                        transaction = await self.command_wait(
-                            SOCKET_POLL,
-                            command=flag_command, action=flag_action, 
-                            id=device_id
-                        )
-                        if transaction is None:
-                            self.cache[flag] = None
-                        elif not RPC_RESULT in transaction:
-                            self.cache[flag] = None
-                        elif not RPC_ATTRIBUTES in transaction[RPC_RESULT]:
-                            self.cache[flag] = None
-                        else:
-                            self.cache[flag] = transaction[RPC_RESULT][RPC_ATTRIBUTES]
-     
+                            if not ONESMART_UPDATE_POLL in dispatcher_topics:
+                                dispatcher_topics.append(ONESMART_UPDATE_POLL)
+                    elif flag_command == COMMAND_DEVICE:
+                        if RPC_DEVICES in transaction_result:
+                            for entry in transaction_result[RPC_DEVICES]:
+                                self.cache[flag][entry[RPC_ID]] = entry
+                            await self.discover_apparatus()
+
+                            if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
+                                dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
+
+                elif flag_command == COMMAND_APPARATUS:
+                    if flag_action == ACTION_LIST:
+                        for device_id in self.cache[(COMMAND_DEVICE, ACTION_LIST)]:
+                            transaction = await self.command_wait(
+                                SOCKET_POLL,
+                                command=flag_command, action=flag_action, 
+                                id=device_id
+                            )
+                            if transaction is None:
+                                self.cache[flag] = None
+                            elif not RPC_RESULT in transaction:
+                                self.cache[flag] = None
+                            elif not RPC_ATTRIBUTES in transaction[RPC_RESULT]:
+                                self.cache[flag] = None
+                            else:
+                                self.cache[flag] = transaction[RPC_RESULT][RPC_ATTRIBUTES]
+            except Exception as e:
+                _LOGGER.error(f"Error while handling update flag { flag }: { e }")
+
         self.update_flags = []        
         
         # Send dispatcher event to update bound entities
@@ -411,10 +421,10 @@ class OneSmartWrapper():
                 id=device_id, attributes=split_attributes
             )
             if transaction == None:
-                _LOGGER.warning(f"Could not update '{split_attributes}' for '{device_name}': Timed out")
+                _LOGGER.warning(f"Could not update {split_attributes} for '{device_name}': Client read timed out")
                 continue
             if RPC_ERROR in transaction[RPC_RESULT]:
-                _LOGGER.warning(f"Could not update '{split_attributes}' for '{device_name}': {transaction[RPC_RESULT]}")
+                _LOGGER.warning(f"Could not update {split_attributes} for '{device_name}': Server responded with {transaction[RPC_RESULT]}")
             else:
                 try:
                     values_new = transaction[RPC_RESULT][RPC_ATTRIBUTES]
@@ -433,7 +443,7 @@ class OneSmartWrapper():
                         values_cache = {}
                     self.cache[(COMMAND_APPARATUS,ACTION_GET)][device_id] = values_cache | values_new
                 except Exception as e:
-                    _LOGGER.warning(f"Could not update '{split_attributes}' for '{device_name}': { e } ''")
+                    _LOGGER.warning(f"Could not update {split_attributes} for '{device_name}': { e } ''")
             
         async_dispatcher_send(self.hass, ONESMART_UPDATE_APPARATUS)
 
