@@ -1,12 +1,12 @@
 """One Smart Control JSON-RPC Socket implementation"""
+import asyncio
 from hashlib import sha1
 import json
-from logging import debug, info
-from select import select
-import socket
+import logging
 import ssl
 from .const import *
 
+_LOGGER = logging.getLogger(__name__)
 
 class OneSmartSocket:
 
@@ -16,7 +16,8 @@ class OneSmartSocket:
         self._ssl_context.check_hostname = False
         self._ssl_context.verify_mode = ssl.CERT_NONE
 
-        self._raw_socket = None
+        self._reader = None
+        self._writer = None
 
         # Allow old ciphers
         self._ssl_context.set_ciphers('DEFAULT')
@@ -25,77 +26,95 @@ class OneSmartSocket:
         self._response_cache = dict()
         self._event_cache = []
 
-    def connect(self, host, port):
-        if self._raw_socket:
+    async def connect(self, host, port):
+        if self._writer:
             try:
-                self._raw_socket.close()
+                self.close()
             except:
                 pass
 
-        self._raw_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._reader, self._writer = await asyncio.open_connection(host, port, ssl=self._ssl_context)
 
-        self._ssl_socket = self._ssl_context.wrap_socket(self._raw_socket)
-        self._ssl_socket.connect((host, port))
         self._transaction_count = 0
         return self.is_connected
 
-    def authenticate(self, username, password):
+    async def authenticate(self, username, password):
         password_hash = sha1(password.encode()).hexdigest()
-        return self.send_cmd(command=COMMAND_AUTHENTICATE, username=username, password=password_hash)
+        return await self.send_cmd(command=COMMAND_AUTHENTICATE, username=username, password=password_hash)
 
-    def close(self):
-        self._ssl_socket.close()
+    async def close(self):
+        try:
+            self._writer.close()
+            await self._writer.wait_closed()
+            self._writer = None
+            self._reader = None
+        except ssl.SSLEOFError:
+            pass
 
     @property
     def is_connected(self):
-        if self._ssl_socket.get_channel_binding() == None:
+        if self._reader is None or self._writer is None:
+            return False
+        elif self._reader.at_eof() or self._writer.is_closing():
             return False
         else:
             return True
 
     """Start a new transaction"""
-    def send_cmd(self, command, **kwargs):
+    async def send_cmd(self, command, **kwargs):
         self._transaction_count += 1
         transaction_id = self._transaction_count
         rpc_message = { RPC_COMMAND:command, RPC_TRANSACTION:transaction_id } | kwargs
         rpc_data = json.dumps(rpc_message) + "\r\n"
-        self._ssl_socket.sendall(rpc_data.encode())
+        self._writer.write(rpc_data.encode())
+        await self._writer.drain()
         self._response_cache[transaction_id] = None
 
         return transaction_id
     
-    def ping(self):
-        self.send_cmd(command=COMMAND_PING)
+    async def ping(self):
+        return await self.send_cmd(command=COMMAND_PING)
 
     """Fetch outstanding responses and cache them by transaction ID"""
-    def get_responses(self):
-        rpc_reply = bytes()
+    async def get_responses(self):
+        data = bytes()
     
+        done_reading = False
         # Stitch split packages
-        while len(rpc_reply) % SOCKET_BUFFER_SIZE == 0:
-            self._ssl_socket.setblocking(False)
-            data_available = select([self._ssl_socket],[],[], SOCKET_RECEIVE_TIMEOUT)
-            self._ssl_socket.setblocking(True)
-            if data_available[0]:
-                if len(rpc_reply) > SOCKET_BUFFER_SIZE:
-                    debug(f"Packet is { len(rpc_reply) } bytes, waiting for more")
-                rpc_reply += self._ssl_socket.recv(SOCKET_BUFFER_SIZE)
-            else:
+        while not done_reading:
+            read_bytes = await self._reader.read(SOCKET_BUFFER_SIZE)
+            if len(read_bytes) == 0:
+                # No data available
                 break
-                
-        if len(rpc_reply) > 0:
-            reply = rpc_reply.decode()
-            if(len(reply) > 8):
-                reply_data = json.loads(reply)
-                if not reply_data == None:
-                    if RPC_TRANSACTION in reply_data:
-                        # Received message is a transaction response
-                        transaction_id = reply_data[RPC_TRANSACTION]
-                        self._response_cache[transaction_id] = reply_data
-                        
-                    else:
-                        # Message is not part of a transaction. Add to eventqueue.
-                        self._event_cache.append(reply_data)
+            elif len(read_bytes) == SOCKET_BUFFER_SIZE:
+                data += read_bytes
+                _LOGGER.debug(f"Packet is { len(data) } bytes, waiting for more")
+                continue
+            else:
+                data += read_bytes
+                done_reading = True
+        messages = data.split(b"\r\n")
+        
+        for message_bytes in messages:
+            if len(message_bytes) > 8:
+                reply = message_bytes.decode()
+                try:
+                    reply_data = json.loads(reply)
+                    if not reply_data == None:
+                        if RPC_TRANSACTION in reply_data:
+                            # Received message is a transaction response
+                            transaction_id = reply_data[RPC_TRANSACTION]
+                            self._response_cache[transaction_id] = reply_data
+                            
+                        else:
+                            # Message is not part of a transaction. Add to eventqueue.
+                            self._event_cache.append(reply_data)
+                except json.JSONDecodeError:
+                    _LOGGER.warning("JSON Decode failed:")
+                    _LOGGER.debug("Reply data: \"{ reply }\"")
+                except Exception as e:
+                    _LOGGER.error(f"Unexpected error while reading from the socket: { e }")
+
 
     """Get the result of a cached transaction"""
     def get_transaction(self, transaction_id):

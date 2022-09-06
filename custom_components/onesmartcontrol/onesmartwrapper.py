@@ -1,11 +1,12 @@
 import asyncio
-from logging import error, warning
+import logging
 import struct
 from homeassistant.core import HomeAssistant, CoreState
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util.timeout import TimeoutManager
-from functools import partial
 from socket import error as SOCKET_ERROR
+
+_LOGGER = logging.getLogger(__name__)
 
 from homeassistant.const import (
     EVENT_HOMEASSISTANT_STARTED,
@@ -55,6 +56,10 @@ class OneSmartWrapper():
         self.cache[(COMMAND_DEVICE,ACTION_LIST)] = dict()
         self.cache[(COMMAND_APPARATUS,ACTION_GET)] = dict()
 
+        self.last_update = dict()
+        self.last_update[INTERVAL_TRACKER_POLL] = 0
+        self.last_update[INTERVAL_TRACKER_DEFINITIONS] = 0
+
         self.update_flags = []
         self.command_queue = []
 
@@ -68,12 +73,6 @@ class OneSmartWrapper():
             if connection_status != SETUP_SUCCESS:
                 return connection_status
         
-        # Set update flags
-        await self.update_definitions()
-        
-        # Wait for incoming data
-        await self.handle_update_flags()
-
         # Check cache
         cache = self.get_cache()
 
@@ -91,49 +90,48 @@ class OneSmartWrapper():
             self.runners.append(asyncio.create_task(
                 self.run_poll()
             ))
-        self.hass.bus.async_listen_once(
-            EVENT_HOMEASSISTANT_STARTED, setup_runners
-        )
+        if self.hass.state != CoreState.running:
+            self.hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED, setup_runners
+            )
+        else:
+            await setup_runners(None)
 
         return SETUP_SUCCESS
 
     async def connect(self, socket_name):
+        socket = self.sockets[socket_name]
         try:
             async with self.timeout.async_timeout(SOCKET_CONNECTION_TIMEOUT):
-                connection_success = await self.hass.async_add_executor_job(
-                    self.sockets[socket_name].connect,
-                    self.host, self.port
-                )
+                connection_success = await socket.connect(self.host, self.port)
         except asyncio.TimeoutError:
-            warning(f"Connection timeout out after { SOCKET_CONNECTION_TIMEOUT } seconds")
+            _LOGGER.warning(f"Connection timeout out after { SOCKET_CONNECTION_TIMEOUT } seconds")
             return SETUP_FAIL_NETWORK
         except SOCKET_ERROR as e:
-            warning(f"Connection error: { e }")
+            _LOGGER.warning(f"Connection error: { e }")
             return SETUP_FAIL_NETWORK
+        else:
+            _LOGGER.info(f"Socket { socket_name }: Established network connection")
         
         if not connection_success:
             return SETUP_FAIL_NETWORK
 
-        login_transaction = await self.hass.async_add_executor_job(
-            self.sockets[socket_name].authenticate,
-            self.username, self.password
-        )
+        login_transaction = await socket.authenticate(self.username, self.password)
 
         login_status = None
         try:
             async with self.timeout.async_timeout(SOCKET_AUTHENTICATION_TIMEOUT):
                 while login_status == None:
-                    self.sockets[socket_name].get_responses()
-                    login_status = await self.hass.async_add_executor_job(
-                        self.sockets[socket_name].get_transaction,
-                        login_transaction
-                    )
+                    await socket.get_responses()
+                    login_status = socket.get_transaction(login_transaction)
         except asyncio.TimeoutError:
-            warning(f"Authentication timeout out after { SOCKET_AUTHENTICATION_TIMEOUT } seconds")
+            _LOGGER.warning(f"Authentication timeout out after { SOCKET_AUTHENTICATION_TIMEOUT } seconds")
             return SETUP_FAIL_AUTH
         except Exception as e:
-            warning(f"Authentication error: { e }")
+            _LOGGER.warning(f"Authentication error: { e }")
             return SETUP_FAIL_AUTH
+        else:
+            _LOGGER.info(f"Socket { socket_name }: Authentication successful")
         
 
         if RPC_ERROR in login_status:
@@ -144,40 +142,57 @@ class OneSmartWrapper():
                     # Subscribe to energy events
                     await self.subscribe(topics=[TOPIC_ENERGY, TOPIC_SITE])
                 elif socket_name == SOCKET_POLL:
-                    # Fetch initial polling data
-                    await self.update_cache()
+                    # Set update flags
+                    self.set_update_flag((COMMAND_SITE,ACTION_GET))
+                    self.set_update_flag((COMMAND_METER,ACTION_LIST))
+                    self.set_update_flag((COMMAND_DEVICE,ACTION_LIST))
+                    self.last_update[INTERVAL_TRACKER_DEFINITIONS] = time()
+
+                    self.set_update_flag((COMMAND_ENERGY,ACTION_TOTAL))
+                    self.last_update[INTERVAL_TRACKER_POLL] = time()
+                    
+                    # Wait for incoming data
+                    await self.handle_update_flags()
             except:
                 return SETUP_FAIL_NETWORK
             else:
                 return SETUP_SUCCESS
 
+    """Make sure the selected socket object is connected"""
     async def ensure_connected_socket(self, socket_name):
         for connect_attempt in range(0, SOCKET_RECONNECT_RETRIES):
             try:
                 # Check if socket status is connected
                 if not self.sockets[socket_name].is_connected:
-                    await self.connect(socket_name)
+                    connection_status = await self.connect(socket_name)
+                    if not connection_status == SETUP_SUCCESS:
+                        _LOGGER.warning(f"Reconnect failed. Trying again in {SOCKET_RECONNECT_DELAY} seconds. Attempt { connect_attempt + 1} of { SOCKET_RECONNECT_RETRIES }.")
+                        await asyncio.sleep(SOCKET_RECONNECT_DELAY)
+                    else:
+                        _LOGGER.info(f"Socket { socket_name } successfully reconnected after { connect_attempt + 1 } attempts.")
                     continue
 
                 # Try ping
                 ping_result = await self.command_wait(socket_name, COMMAND_PING)
 
                 if ping_result == None:
-                    warning(f"Ping to server timed out. Reconnecting.")
+                    _LOGGER.warning(f"Ping to server timed out. Reconnecting.")
                     await self.connect(socket_name)
                     continue
 
             except SOCKET_ERROR as e:
-                warning(f"Connection error on socket {socket_name}: '{e}' Reconnecting in {SOCKET_RECONNECT_DELAY} seconds. Attempt { connect_attempt } of { SOCKET_RECONNECT_RETRIES }.")
+                _LOGGER.warning(f"Connection error on socket {socket_name}: '{e}' Reconnecting in {SOCKET_RECONNECT_DELAY} seconds. Attempt { connect_attempt + 1 } of { SOCKET_RECONNECT_RETRIES }.")
                 await asyncio.sleep(SOCKET_RECONNECT_DELAY)
                 continue
             except Exception as e:
-                error(f"Unknown error while checking the connection: {e}")
+                _LOGGER.error(f"Unknown error while checking the connection: {e}")
             else:
+                # Connection successful
                 return
 
-        error(f"Reconnect failed after { connect_attempt } attempts.")
+        _LOGGER.error(f"Reconnect failed after { SOCKET_RECONNECT_RETRIES } attempts.")
 
+    """Runner for the POLL channel"""
     async def run_poll(self) -> None:
         await self.hass.async_block_till_done()
         socket_name = SOCKET_POLL
@@ -185,43 +200,47 @@ class OneSmartWrapper():
         # Loop through received data, blocked by socket.read
         while self.hass.state == CoreState.not_running or self.hass.is_running:
             await self.ensure_connected_socket(socket_name)
-            socket = self.sockets[socket_name]
             try:
-                # Read data from the socket
-                await self.hass.async_add_executor_job(
-                    socket.get_responses
-                )
-
                 # Update caches
+                if time() > self.last_update[INTERVAL_TRACKER_DEFINITIONS] + SCAN_INTERVAL_DEFINITIONS:
+                    _LOGGER.info(f"Updating definitions")
+                    self.set_update_flag((COMMAND_SITE,ACTION_GET))
+                    self.set_update_flag((COMMAND_METER,ACTION_LIST))
+                    self.set_update_flag((COMMAND_DEVICE,ACTION_LIST))
+                    self.last_update[INTERVAL_TRACKER_DEFINITIONS] = time()
+                    
+
+                if time() > self.last_update[INTERVAL_TRACKER_POLL] + SCAN_INTERVAL_CACHE:
+                    _LOGGER.info(f"Updating cache") 
+                    self.set_update_flag((COMMAND_ENERGY,ACTION_TOTAL))
+                    self.last_update[INTERVAL_TRACKER_POLL] = time()
+                    
+                
                 await self.handle_update_flags()
 
                 # Update apparatus attributes
                 await self.poll_apparatus()
 
             except Exception as e:
-                error(f"Error in { socket_name } gateway wrapper: { e }")
+                _LOGGER.error(f"Error in { socket_name } gateway wrapper: { e }")
 
-        warning(f"Gateway wrapper exited ({ socket_name }).")
+        _LOGGER.warning(f"Gateway wrapper exited ({ socket_name }).")
 
+    """Runner for the PUSH channel"""
     async def run_push(self) -> None:
         await self.hass.async_block_till_done()
 
         socket_name = SOCKET_PUSH
 
-        # Loop through received data, blocked by socket.read
         while self.hass.state == CoreState.not_running or self.hass.is_running:
             await self.ensure_connected_socket(socket_name)
             socket = self.sockets[socket_name]
         
             try:
-                await self.hass.async_add_executor_job(
-                    socket.get_responses
-                )
+                await socket.get_responses()
                 
                 # Read events
-                events = await self.hass.async_add_executor_job(
-                    socket.get_events
-                )
+                events = socket.get_events()
                 
                 # Handle events
                 for event in events:
@@ -240,25 +259,23 @@ class OneSmartWrapper():
 
 
             except Exception as e:
-                error(f"Error in { socket_name } gateway wrapper: { e }")
+                _LOGGER.error(f"Error in { socket_name } gateway wrapper: { e }")
 
-        warning(f"Gateway wrapper exited ({ socket_name }).")
+        _LOGGER.warning(f"Gateway wrapper exited ({ socket_name }).")
 
+    """Shut down the wrapper"""
     async def close(self):
         for task in self.runners:
             task.cancel()
 
         for socket_name in self.sockets:
-            await self.hass.async_add_executor_job(
-                self.sockets[socket_name].close
-            )
+            await self.sockets[socket_name].close()
         
 
     """Send command to the socket and return the transaction id"""
     async def command(self, socket_name, command, **kwargs) -> int:
-        return await self.hass.async_add_executor_job(
-            partial(self.sockets[socket_name].send_cmd, command, **kwargs)
-        )
+        socket = self.sockets[socket_name]
+        return await socket.send_cmd(command, **kwargs)
 
     """Send command to the socket and return the transaction data"""
     async def command_wait(self, socket_name, command, **kwargs):
@@ -269,16 +286,12 @@ class OneSmartWrapper():
         try:
             async with self.timeout.async_timeout(SOCKET_COMMAND_TIMEOUT):
                 while not transaction_done:
-                    await self.hass.async_add_executor_job(
-                        self.sockets[socket_name].get_responses
-                    )
-
-                    transaction = await self.hass.async_add_executor_job(
-                        self.sockets[socket_name].get_transaction, transaction_id
-                    )
+                    await self.sockets[socket_name].get_responses()
+                    transaction = self.sockets[socket_name].get_transaction(transaction_id)
                     transaction_done = transaction != None
+
         except asyncio.TimeoutError:
-            warning(f"Command timed out after {SOCKET_COMMAND_TIMEOUT} seconds: { command }")
+            _LOGGER.warning(f"Command on socket { socket_name } timed out after {SOCKET_COMMAND_TIMEOUT} seconds: { command }")
             return None
         else:
             return transaction
@@ -287,15 +300,6 @@ class OneSmartWrapper():
     async def subscribe(self, topics: list):
         return await self.command(socket_name=SOCKET_PUSH, command=COMMAND_EVENTS, action=ACTION_SUBSCRIBE, topics=topics)
 
-    """Update id-name mappings"""
-    async def update_definitions(self):
-        self.set_update_flag((COMMAND_SITE,ACTION_GET))
-        self.set_update_flag((COMMAND_METER,ACTION_LIST))
-        self.set_update_flag((COMMAND_DEVICE,ACTION_LIST))
-        
-    """Update polling cache"""
-    async def update_cache(self):
-        self.set_update_flag((COMMAND_ENERGY,ACTION_TOTAL))
 
     def set_update_flag(self, flag):
         self.update_flags.append(flag)
@@ -304,60 +308,77 @@ class OneSmartWrapper():
         dispatcher_topics = []
 
         # Handle update flags
+        if len(self.update_flags) > 0:
+            _LOGGER.info(f"Handling { len(self.update_flags) } update flags: { self.update_flags }")
         for flag in self.update_flags:
-            flag_command = flag[0]
-            flag_action = flag[1]
+            try:
+                flag_command = flag[0]
+                flag_action = flag[1]
 
-            if flag_command in [COMMAND_SITE, COMMAND_METER, COMMAND_DEVICE, COMMAND_ENERGY]:
-                transaction = await self.command_wait(SOCKET_POLL, command=flag_command, action=flag_action)
+                if flag_command in [COMMAND_SITE, COMMAND_METER, COMMAND_DEVICE, COMMAND_ENERGY]:
+                    transaction = await self.command_wait(SOCKET_POLL, command=flag_command, action=flag_action)
+                    if transaction == None:
+                        # Skip if transaction returns no data.
+                        continue
+                    elif not RPC_RESULT in transaction:
+                        # TODO: Set depending sensors to unavailable
+                        continue
+                    else:
+                        transaction_result = transaction[RPC_RESULT]
 
-                if flag_command == COMMAND_SITE:
-                    # Fill cache with RPC result
-                    self.cache[flag] = transaction[RPC_RESULT]
+                    if flag_command == COMMAND_SITE:
+                        # Fill cache with RPC result
+                        self.cache[flag] = transaction_result
 
-                    # Also store in Site Event cache
-                    self.cache[EVENT_SITE_UPDATE] = transaction[RPC_RESULT]
-
-                    if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
-                        dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
-
-                elif flag_command == COMMAND_METER:
-                    # Fill cache with RPC result (in corresponding subkey)
-                    if RPC_METERS in transaction[RPC_RESULT]:
-                        self.cache[flag] = transaction[RPC_RESULT][RPC_METERS]
-
-                        if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
-                            dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
-
-                elif flag_command == COMMAND_ENERGY:
-                    if RPC_VALUES in transaction[RPC_RESULT]:
-                        for entry in transaction[RPC_RESULT][RPC_VALUES]:
-                            self.cache[flag][entry[RPC_ID]] = entry[RPC_VALUE]
-
-                        if not ONESMART_UPDATE_POLL in dispatcher_topics:
-                            dispatcher_topics.append(ONESMART_UPDATE_POLL)
-                elif flag_command == COMMAND_DEVICE:
-                    if RPC_DEVICES in transaction[RPC_RESULT]:
-                        for entry in transaction[RPC_RESULT][RPC_DEVICES]:
-                            self.cache[flag][entry[RPC_ID]] = entry
-                        await self.discover_apparatus()
+                        # Also store in Site Event cache
+                        self.cache[EVENT_SITE_UPDATE] = transaction_result
 
                         if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
                             dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
 
-            elif flag_command == COMMAND_APPARATUS:
-                if flag_action == ACTION_LIST:
-                    for device_id in self.cache[(COMMAND_DEVICE, ACTION_LIST)]:
-                        transaction = await self.command_wait(
-                            SOCKET_POLL,
-                            command=flag_command, action=flag_action, 
-                            id=device_id
-                        )
-                        if not RPC_ATTRIBUTES in transaction[RPC_RESULT]:
-                            self.cache[flag] = None
-                        else:
-                            self.cache[flag] = transaction[RPC_RESULT][RPC_ATTRIBUTES]
-     
+                    elif flag_command == COMMAND_METER:
+                        # Fill cache with RPC result (in corresponding subkey)
+                        if RPC_METERS in transaction_result:
+                            self.cache[flag] = transaction_result[RPC_METERS]
+
+                            if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
+                                dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
+
+                    elif flag_command == COMMAND_ENERGY:
+                        if RPC_VALUES in transaction_result:
+                            for entry in transaction_result[RPC_VALUES]:
+                                self.cache[flag][entry[RPC_ID]] = entry[RPC_VALUE]
+
+                            if not ONESMART_UPDATE_POLL in dispatcher_topics:
+                                dispatcher_topics.append(ONESMART_UPDATE_POLL)
+                    elif flag_command == COMMAND_DEVICE:
+                        if RPC_DEVICES in transaction_result:
+                            for entry in transaction_result[RPC_DEVICES]:
+                                self.cache[flag][entry[RPC_ID]] = entry
+                            await self.discover_apparatus()
+
+                            if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
+                                dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
+
+                elif flag_command == COMMAND_APPARATUS:
+                    if flag_action == ACTION_LIST:
+                        for device_id in self.cache[(COMMAND_DEVICE, ACTION_LIST)]:
+                            transaction = await self.command_wait(
+                                SOCKET_POLL,
+                                command=flag_command, action=flag_action, 
+                                id=device_id
+                            )
+                            if transaction is None:
+                                self.cache[flag] = None
+                            elif not RPC_RESULT in transaction:
+                                self.cache[flag] = None
+                            elif not RPC_ATTRIBUTES in transaction[RPC_RESULT]:
+                                self.cache[flag] = None
+                            else:
+                                self.cache[flag] = transaction[RPC_RESULT][RPC_ATTRIBUTES]
+            except Exception as e:
+                _LOGGER.error(f"Error while handling update flag { flag }: { e }")
+
         self.update_flags = []        
         
         # Send dispatcher event to update bound entities
@@ -393,16 +414,17 @@ class OneSmartWrapper():
 
             self.last_apparatus_index[device_id] = end_index
 
+            await self.ensure_connected_socket(SOCKET_POLL)
             transaction = await self.command_wait(
                 SOCKET_POLL,
                 command=COMMAND_APPARATUS, action=ACTION_GET, 
                 id=device_id, attributes=split_attributes
             )
             if transaction == None:
-                warning(f"Could not update '{split_attributes}' for '{device_name}': Timed out")
+                _LOGGER.warning(f"Could not update {split_attributes} for '{device_name}': Client read timed out")
                 continue
             if RPC_ERROR in transaction[RPC_RESULT]:
-                warning(f"Could not update '{split_attributes}' for '{device_name}': {transaction[RPC_RESULT]}")
+                _LOGGER.warning(f"Could not update {split_attributes} for '{device_name}': Server responded with {transaction[RPC_RESULT]}")
             else:
                 try:
                     values_new = transaction[RPC_RESULT][RPC_ATTRIBUTES]
@@ -413,7 +435,7 @@ class OneSmartWrapper():
                             if bit_length >= BIT_LENGTH_DOUBLE - 4:
                                 values_new[value_name] = struct.unpack("<d",value.to_bytes(8,byteorder="little", signed=True))[0]
                                 if values_new[value_name] < 1:
-                                    values_new[value_name] = 0 
+                                    values_new[value_name] = 0
 
                     if device_id in self.cache[(COMMAND_APPARATUS,ACTION_GET)]:
                         values_cache = self.cache[(COMMAND_APPARATUS,ACTION_GET)][device_id]
@@ -421,7 +443,7 @@ class OneSmartWrapper():
                         values_cache = {}
                     self.cache[(COMMAND_APPARATUS,ACTION_GET)][device_id] = values_cache | values_new
                 except Exception as e:
-                    warning(f"Could not update '{split_attributes}' for '{device_name}': { e } ''")
+                    _LOGGER.warning(f"Could not update {split_attributes} for '{device_name}': { e } ''")
             
         async_dispatcher_send(self.hass, ONESMART_UPDATE_APPARATUS)
 
