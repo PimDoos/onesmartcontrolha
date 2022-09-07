@@ -161,10 +161,12 @@ class OneSmartWrapper():
 
     """Make sure the selected socket object is connected"""
     async def ensure_connected_socket(self, socket_name):
+        socket = self.sockets[socket_name]
+        force_reconnect = False
         for connect_attempt in range(0, SOCKET_RECONNECT_RETRIES):
             try:
                 # Check if socket status is connected
-                if not self.sockets[socket_name].is_connected:
+                if not socket.is_connected or force_reconnect:
                     connection_status = await self.connect(socket_name)
                     if not connection_status == SETUP_SUCCESS:
                         _LOGGER.warning(f"Reconnect failed. Trying again in {SOCKET_RECONNECT_DELAY} seconds. Attempt { connect_attempt + 1} of { SOCKET_RECONNECT_RETRIES }.")
@@ -178,12 +180,14 @@ class OneSmartWrapper():
 
                 if ping_result == None:
                     _LOGGER.warning(f"Ping to server timed out. Reconnecting.")
-                    await self.connect(socket_name)
+                    force_reconnect = True
                     continue
 
             except SOCKET_ERROR as e:
                 _LOGGER.warning(f"Connection error on socket {socket_name}: '{e}' Reconnecting in {SOCKET_RECONNECT_DELAY} seconds. Attempt { connect_attempt + 1 } of { SOCKET_RECONNECT_RETRIES }.")
+                force_reconnect = True
                 await asyncio.sleep(SOCKET_RECONNECT_DELAY)
+                
                 continue
             except Exception as e:
                 _LOGGER.error(f"Unknown error while checking the connection: {e}")
