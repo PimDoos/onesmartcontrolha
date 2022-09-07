@@ -207,7 +207,7 @@ class OneSmartWrapper():
                     _LOGGER.info(f"Updating definitions")
                     self.set_update_flag((COMMAND_SITE,ACTION_GET))
                     self.set_update_flag((COMMAND_METER,ACTION_LIST))
-                    self.set_update_flag((COMMAND_DEVICE,ACTION_LIST))
+                    # self.set_update_flag((COMMAND_DEVICE,ACTION_LIST))
                     self.last_update[INTERVAL_TRACKER_DEFINITIONS] = time()
                     
 
@@ -456,108 +456,111 @@ class OneSmartWrapper():
 
     async def discover_apparatus(self):
         for device_id in self.cache[(COMMAND_DEVICE,ACTION_LIST)]:
-            device = self.cache[(COMMAND_DEVICE,ACTION_LIST)][device_id]
-            if(device[RPC_VISIBLE] == False):
-                continue
-            self.device_apparatus_attributes[device_id] = dict()
+            try:
+                device = self.cache[(COMMAND_DEVICE,ACTION_LIST)][device_id]
+                if(device[RPC_VISIBLE] == False):
+                    continue
 
-            transaction = await self.command_wait(SOCKET_POLL, COMMAND_APPARATUS, action=ACTION_LIST, id=device_id)
-            attributes = transaction[RPC_RESULT][RPC_ATTRIBUTES]
+                transaction = await self.command_wait(SOCKET_POLL, COMMAND_APPARATUS, action=ACTION_LIST, id=device_id)
+                attributes = transaction[RPC_RESULT][RPC_ATTRIBUTES]
+                self.device_apparatus_attributes[device_id] = dict()
 
-            for attribute in attributes:
-                if attribute[RPC_ACCESS] == ACCESS_READ:
-                    if attribute[RPC_TYPE] in [TYPE_NUMBER, TYPE_REAL]:
-                        attribute[CONF_PLATFORM] = Platform.SENSOR
-                        attribute[ATTR_STATE_CLASS] = SensorStateClass.MEASUREMENT
-                        # Temperature sensors
-                        if "_temp" in attribute[RPC_NAME]:
-                            attribute[ATTR_UNIT_OF_MEASUREMENT] = TEMP_CELSIUS
-                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.TEMPERATURE
+                for attribute in attributes:
+                    if attribute[RPC_ACCESS] == ACCESS_READ:
+                        if attribute[RPC_TYPE] in [TYPE_NUMBER, TYPE_REAL]:
+                            attribute[CONF_PLATFORM] = Platform.SENSOR
+                            attribute[ATTR_STATE_CLASS] = SensorStateClass.MEASUREMENT
+                            # Temperature sensors
+                            if "_temp" in attribute[RPC_NAME]:
+                                attribute[ATTR_UNIT_OF_MEASUREMENT] = TEMP_CELSIUS
+                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.TEMPERATURE
+                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                                continue
+
+                            elif "_percent" in attribute[RPC_NAME] or "efficiency" in attribute[RPC_NAME]:
+                                attribute[ATTR_UNIT_OF_MEASUREMENT] = PERCENTAGE
+                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                                continue
+                            
+
+                            elif "co2_level" in attribute[RPC_NAME]:
+                                attribute[ATTR_UNIT_OF_MEASUREMENT] = CONCENTRATION_PARTS_PER_MILLION
+                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.CO2
+                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                                continue
+                            
+                            elif "_rpm" in attribute[RPC_NAME]:
+                                attribute[ATTR_UNIT_OF_MEASUREMENT] = "rpm"
+                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                                continue
+                            
+                            elif "flow_rate_4graph" in attribute[RPC_NAME]:
+                                attribute[ATTR_UNIT_OF_MEASUREMENT] = f"{VOLUME_LITERS}/{TIME_MINUTES}"
+                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                                continue
+                            
+                            
+                            elif "_power" in attribute[RPC_NAME]:
+                                attribute[ATTR_UNIT_OF_MEASUREMENT] = POWER_WATT
+                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.POWER
+                                if "reactive" in attribute[RPC_NAME]:
+                                    attribute[ATTR_UNIT_OF_MEASUREMENT] = None
+                                    attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.POWER_FACTOR
+
+                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                                continue
+
+                            elif "current" in attribute[RPC_NAME]:
+                                attribute[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_CURRENT_AMPERE
+                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.CURRENT
+                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                                continue
+                            
+                            elif "voltage" in attribute[RPC_NAME]:
+                                attribute[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_POTENTIAL_VOLT
+                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.VOLTAGE
+                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                                continue
+                            
+                            elif "frequency" in attribute[RPC_NAME]:
+                                attribute[ATTR_UNIT_OF_MEASUREMENT] = FREQUENCY_HERTZ
+                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.FREQUENCY
+                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                                continue
+
+                            elif "e_total" == attribute[RPC_NAME]:
+                                attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
+                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
+                                attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL
+                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                                continue
+
+                            elif "e_day" == attribute[RPC_NAME]:
+                                attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
+                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
+                                attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
+                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                                continue
+                            
+                            elif "_energy_" in attribute[RPC_NAME] and device[RPC_TYPE] == "ENERGY_PROCON_ATW":
+                                attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_WATT_HOUR
+                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
+                                attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
+                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                                continue
+
+                        elif attribute[RPC_TYPE] in [TYPE_STRING]:
+                            attribute[CONF_PLATFORM] = Platform.SENSOR
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
                             continue
 
-                        elif "_percent" in attribute[RPC_NAME] or "efficiency" in attribute[RPC_NAME]:
-                            attribute[ATTR_UNIT_OF_MEASUREMENT] = PERCENTAGE
+                    elif attribute[RPC_ACCESS] == ACCESS_READWRITE:
+                        if "operating_mode" in attribute[RPC_NAME]:
+                            attribute[CONF_PLATFORM] = Platform.SENSOR
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
                             continue
-                        
-
-                        elif "co2_level" in attribute[RPC_NAME]:
-                            attribute[ATTR_UNIT_OF_MEASUREMENT] = CONCENTRATION_PARTS_PER_MILLION
-                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.CO2
-                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                            continue
-                        
-                        elif "_rpm" in attribute[RPC_NAME]:
-                            attribute[ATTR_UNIT_OF_MEASUREMENT] = "rpm"
-                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                            continue
-                        
-                        elif "flow_rate_4graph" in attribute[RPC_NAME]:
-                            attribute[ATTR_UNIT_OF_MEASUREMENT] = f"{VOLUME_LITERS}/{TIME_MINUTES}"
-                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                            continue
-                        
-                        
-                        elif "_power" in attribute[RPC_NAME]:
-                            attribute[ATTR_UNIT_OF_MEASUREMENT] = POWER_WATT
-                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.POWER
-                            if "reactive" in attribute[RPC_NAME]:
-                                attribute[ATTR_UNIT_OF_MEASUREMENT] = None
-                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.POWER_FACTOR
-
-                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                            continue
-
-                        elif "current" in attribute[RPC_NAME]:
-                            attribute[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_CURRENT_AMPERE
-                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.CURRENT
-                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                            continue
-                        
-                        elif "voltage" in attribute[RPC_NAME]:
-                            attribute[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_POTENTIAL_VOLT
-                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.VOLTAGE
-                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                            continue
-                        
-                        elif "frequency" in attribute[RPC_NAME]:
-                            attribute[ATTR_UNIT_OF_MEASUREMENT] = FREQUENCY_HERTZ
-                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.FREQUENCY
-                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                            continue
-
-                        elif "e_total" == attribute[RPC_NAME]:
-                            attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
-                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
-                            attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL
-                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                            continue
-
-                        elif "e_day" == attribute[RPC_NAME]:
-                            attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
-                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
-                            attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
-                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                            continue
-                        
-                        elif "_energy_" in attribute[RPC_NAME] and device[RPC_TYPE] == "ENERGY_PROCON_ATW":
-                            attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_WATT_HOUR
-                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
-                            attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
-                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                            continue
-
-                    elif attribute[RPC_TYPE] in [TYPE_STRING]:
-                        attribute[CONF_PLATFORM] = Platform.SENSOR
-                        self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                        continue
-
-                elif attribute[RPC_ACCESS] == ACCESS_READWRITE:
-                    if "operating_mode" in attribute[RPC_NAME]:
-                        attribute[CONF_PLATFORM] = Platform.SENSOR
-                        self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                        continue
+            except Exception as e:
+                _LOGGER.error(f"Error while discovering attributes for device { device[RPC_NAME] }: { e }")
             
     def get_apparatus_attributes(self, device_id = None):
         if device_id != None:
