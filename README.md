@@ -26,8 +26,10 @@ Supported device sensors:
 - CO2
 - Power
 - Huawei SUN2000 Energy (Total/day)
+- Efficiency
 - Voltage
 - Current
 - Frequency
 - Percentages
-- Mitsubishi Heatpump (via Procon ATW): Operation mode, flow rate, various diagnostic sensors
+- Revolutions per minute (RPM)
+- Mitsubishi Heatpump (via Procon ATW): Operation mode, flow rate, various diagnostic sensors, energy consumption/production
