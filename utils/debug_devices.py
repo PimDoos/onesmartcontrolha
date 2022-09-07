@@ -28,26 +28,37 @@ async def run():
 	for device in devices:
 		device_name = device[RPC_NAME]
 		print(f"=== { device_name } ===")
+		print(f"Device properties: { device }")
+		
 		device_id = device[RPC_ID]
 		result = await command_wait(COMMAND_APPARATUS, action=ACTION_LIST, id=device_id)
 		attributes = result[RPC_RESULT][RPC_ATTRIBUTES]
+
+		print(f"Attributes: { len (attributes) }")
+		device_attributes = list()
 		for attribute in attributes:
 			attribute_name = attribute[RPC_NAME]
 			if attribute[RPC_ACCESS] in [ACCESS_READ, ACCESS_READWRITE]:
-				try:
-					result = await command_wait(
-						COMMAND_APPARATUS, action=ACTION_GET, 
-						id=device_id, attributes=[attribute_name]
-					)
-					attribute_value = result[RPC_RESULT][RPC_ATTRIBUTES][attribute_name]
-				except:
-					attribute_value = "Failed"
-				finally:
-					print(attribute_name, attribute, attribute_value)
+				device_attributes.append(attribute_name)
+
+		try:
+			result = await command_wait(
+				COMMAND_APPARATUS, action=ACTION_GET, 
+				id=device_id, attributes=device_attributes
+			)
+			device[RPC_ATTRIBUTES] = result[RPC_RESULT][RPC_ATTRIBUTES]
+		except Exception as e:
+			print(f"Error fetching attributes for { device_id }: { e }")
+
+		for attribute in attributes:
+			attribute_name = attribute[RPC_NAME]
+			if attribute_name in device[RPC_ATTRIBUTES]:
+				attribute_value = device[RPC_ATTRIBUTES][attribute_name]
+				print(attribute_name, attribute, attribute_value)
 			else:
 				print(attribute_name, attribute)
 
-			
+		print("")
 
 	await shutdown()
 
