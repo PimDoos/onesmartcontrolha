@@ -5,8 +5,8 @@ from onesmartsocket import OneSmartSocket
 gateway = OneSmartSocket()
 
 async def setup():
-	await gateway.connect("172.25.16.119", 9010)
-	await gateway.authenticate("admin", "MasPasOne")
+	await gateway.connect("OneServerIP", 9010)
+	await gateway.authenticate("admin", "password")
 
 async def command_wait(command, **kwargs):
 	transaction_id = await gateway.send_cmd(command, **kwargs)
