@@ -1,53 +1,54 @@
-from time import time
+import asyncio
 from const import *
 from onesmartsocket import OneSmartSocket
 
 gateway = OneSmartSocket()
-gateway.connect("oneconnect-ip", 9010)
-login_transaction = gateway.authenticate("user", "password")
-gateway.get_transaction(login_transaction)
 
-last_ping = time()
-meters = None
-site = None
+async def setup():
+	await gateway.connect("172.25.16.119", 9010)
+	await gateway.authenticate("admin", "MasPasOne")
 
-def command_wait(command, **kwargs):
-	transaction_id = gateway.send_cmd(command, **kwargs)
+async def command_wait(command, **kwargs):
+	transaction_id = await gateway.send_cmd(command, **kwargs)
 	transaction_done = False
 	while not transaction_done:
-		gateway.get_responses()
+		await gateway.get_responses()
 		transaction = gateway.get_transaction(transaction_id)
 		transaction_done = transaction != None
 
 	return transaction
+async def shutdown():
+	await gateway.close()
 
-def split_list(lst, n):  
-	for i in range(0, len(lst), n): 
-		yield lst[i:i + n]
+async def run():
+	await setup()
 
-devices = command_wait(COMMAND_DEVICE, action=ACTION_LIST)
-devices = devices[RPC_RESULT][RPC_DEVICES]
+	result = await command_wait(COMMAND_DEVICE, action=ACTION_LIST)
+	devices = result[RPC_RESULT][RPC_DEVICES]
+	for device in devices:
+		device_name = device[RPC_NAME]
+		print(f"=== { device_name } ===")
+		device_id = device[RPC_ID]
+		result = await command_wait(COMMAND_APPARATUS, action=ACTION_LIST, id=device_id)
+		attributes = result[RPC_RESULT][RPC_ATTRIBUTES]
+		for attribute in attributes:
+			attribute_name = attribute[RPC_NAME]
+			if attribute[RPC_ACCESS] in [ACCESS_READ, ACCESS_READWRITE]:
+				try:
+					result = await command_wait(
+						COMMAND_APPARATUS, action=ACTION_GET, 
+						id=device_id, attributes=[attribute_name]
+					)
+					attribute_value = result[RPC_RESULT][RPC_ATTRIBUTES][attribute_name]
+				except:
+					attribute_value = "Failed"
+				finally:
+					print(attribute_name, attribute, attribute_value)
+			else:
+				print(attribute_name, attribute)
 
-for device in devices:
-	print("============================================")
-	print(device[RPC_NAME], "-", device[RPC_TYPE], "-", device["group"])
-	if not device[RPC_VISIBLE]:
-		continue
+			
 
-	apparatuses = command_wait(COMMAND_APPARATUS, action=ACTION_LIST, id=device[RPC_ID])
-	apparatuses = apparatuses[RPC_RESULT][RPC_ATTRIBUTES]
+	await shutdown()
 
-	print(f"Apparatuses: {len(apparatuses)}")
-	sensors = []
-	selects = []
-	for apparatus in apparatuses:
-		print(apparatus)
-		# Fetch values for READ access
-		# if apparatus[RPC_ACCESS] == ACCESS_READ and apparatus[RPC_TYPE] in [TYPE_NUMBER, TYPE_REAL, TYPE_STRING]:
-		# 	transaction = command_wait(COMMAND_APPARATUS, action=ACTION_GET, id=device[RPC_ID], attributes=[apparatus[RPC_NAME]])
-		# 	if not RPC_ERROR in transaction[RPC_RESULT]:
-		# 		sensor_values = transaction[RPC_RESULT][RPC_ATTRIBUTES]	
-		# 		for sensor in sensor_values:
-		# 			print(sensor, sensor_values[sensor])
-		# 	else:
-		# 		print(transaction[RPC_RESULT])
+asyncio.run(run())
