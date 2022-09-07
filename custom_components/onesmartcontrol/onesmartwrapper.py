@@ -18,8 +18,9 @@ from homeassistant.const import (
     ELECTRIC_POTENTIAL_VOLT,
     ELECTRIC_CURRENT_AMPERE,
     FREQUENCY_HERTZ,
-    ENERGY_KILO_WATT_HOUR,
-    VOLUME_LITERS, TIME_MINUTES
+    ENERGY_KILO_WATT_HOUR, ENERGY_WATT_HOUR,
+    VOLUME_LITERS, TIME_MINUTES,
+    
     
 )
 from homeassistant.components.sensor import (
@@ -475,14 +476,20 @@ class OneSmartWrapper():
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
                             continue
 
-                        elif "_percent" in attribute[RPC_NAME]:
+                        elif "_percent" in attribute[RPC_NAME] or "efficiency" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = PERCENTAGE
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
                             continue
+                        
 
                         elif "co2_level" in attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = CONCENTRATION_PARTS_PER_MILLION
                             attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.CO2
+                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                            continue
+                        
+                        elif "_rpm" in attribute[RPC_NAME]:
+                            attribute[ATTR_UNIT_OF_MEASUREMENT] = "rpm"
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
                             continue
                         
@@ -529,6 +536,13 @@ class OneSmartWrapper():
 
                         elif "e_day" == attribute[RPC_NAME]:
                             attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
+                            attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
+                            attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
+                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
+                            continue
+                        
+                        elif "_energy_" in attribute[RPC_NAME] and device[RPC_TYPE] == "ENERGY_PROCON_ATW":
+                            attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_WATT_HOUR
                             attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
                             attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
                             self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute

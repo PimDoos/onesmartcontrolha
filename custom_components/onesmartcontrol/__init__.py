@@ -1,14 +1,10 @@
 """The One Smart Control integration"""
 from __future__ import annotations
-from datetime import timedelta
-import datetime
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform, CONF_USERNAME, CONF_PASSWORD, CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-
-from homeassistant.helpers.event import async_track_time_interval
 
 from .const import *
 from .onesmartwrapper import OneSmartWrapper
