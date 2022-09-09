@@ -122,9 +122,7 @@ class OneSmartWrapper():
         login_status = None
         try:
             async with self.timeout.async_timeout(SOCKET_AUTHENTICATION_TIMEOUT):
-                while login_status == None:
-                    await socket.get_responses()
-                    login_status = socket.get_transaction(login_transaction)
+                login_status = await self.wait_for_transaction(socket_name, login_transaction)
         except asyncio.TimeoutError:
             _LOGGER.warning(f"Authentication timeout out after { SOCKET_AUTHENTICATION_TIMEOUT } seconds")
             return SETUP_FAIL_AUTH
@@ -173,6 +171,7 @@ class OneSmartWrapper():
                         await asyncio.sleep(SOCKET_RECONNECT_DELAY)
                     else:
                         _LOGGER.info(f"Socket { socket_name } successfully reconnected after { connect_attempt + 1 } attempts.")
+                        force_reconnect = False
                     continue
 
                 # Try ping
@@ -287,19 +286,31 @@ class OneSmartWrapper():
         transaction_id = await self.command(socket_name, command, **kwargs)
 
         # Wait for transaction to return
-        transaction_done = False
         try:
             async with self.timeout.async_timeout(SOCKET_COMMAND_TIMEOUT):
-                while not transaction_done:
-                    await self.sockets[socket_name].get_responses()
-                    transaction = self.sockets[socket_name].get_transaction(transaction_id)
-                    transaction_done = transaction != None
+                transaction = await self.wait_for_transaction(socket_name, transaction_id)
 
         except asyncio.TimeoutError:
             _LOGGER.warning(f"Command on socket { socket_name } timed out after {SOCKET_COMMAND_TIMEOUT} seconds: { command }")
             return None
         else:
             return transaction
+
+    async def wait_for_transaction(self, socket_name, transaction_id):
+        transaction_done = False
+        first_loop = True
+        while not transaction_done:
+            if first_loop:
+                first_loop = False
+            else:
+                # Wait for a bit if the first loop did not retrieve a result
+                await asyncio.sleep(1)
+            await self.sockets[socket_name].get_responses()
+            transaction = self.sockets[socket_name].get_transaction(transaction_id)
+            transaction_done = transaction != None
+            
+        return transaction
+        
 
     """Subscribe the socket to the specified event topics"""
     async def subscribe(self, topics: list):
