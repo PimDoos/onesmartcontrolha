@@ -7,6 +7,8 @@ logging.basicConfig(level=logging.DEBUG)
 
 gateway = OneSmartSocket()
 
+fetch_attributes = False
+
 async def setup():
 	await gateway.connect("OneServerIP", 9010)
 	await gateway.authenticate("admin", "password")
@@ -64,6 +66,9 @@ async def run():
 		device[RPC_ATTRIBUTES] = dict()
 
 		async def fetch_attribute_values(device, device_id, device_attributes):
+			if not fetch_attributes:
+				return
+			await command_wait(COMMAND_PING)
 			try:
 				print("Fetching attribute values...")
 				result = await command_wait(
