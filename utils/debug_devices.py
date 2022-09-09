@@ -63,7 +63,7 @@ async def run():
 		device_attributes = list()
 		device[RPC_ATTRIBUTES] = dict()
 
-		async def fetch_attribute_values():
+		async def fetch_attribute_values(device, device_id, device_attributes):
 			try:
 				print("Fetching attribute values...")
 				result = await command_wait(
@@ -81,10 +81,10 @@ async def run():
 				device_attributes.append(attribute_name)
 			
 			if len(device_attributes) >= MAX_APPARATUS_ATTRIBUTES_LENGTH:
-				await fetch_attribute_values()
+				await fetch_attribute_values(device, device_id, device_attributes)
 		
 		if len(device_attributes) > 0:
-			await fetch_attribute_values()
+			await fetch_attribute_values(device, device_id, device_attributes)
 
 		for attribute in attributes:
 			attribute_name = attribute[RPC_NAME]
