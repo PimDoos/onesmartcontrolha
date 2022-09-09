@@ -115,6 +115,7 @@ async def run():
 		
 		if time.time() > last_ping + PING_INTERVAL:
 			await gateway.send_cmd(COMMAND_PING)
+		await asyncio.sleep(1)
 
 	await shutdown()
 
