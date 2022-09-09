@@ -1,6 +1,9 @@
 import asyncio
+import time
 from const import *
 from onesmartsocket import OneSmartSocket
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
 gateway = OneSmartSocket()
 
@@ -17,11 +20,25 @@ async def command_wait(command, **kwargs):
 		transaction_done = transaction != None
 
 	return transaction
+
+
 async def shutdown():
 	await gateway.close()
 
 async def run():
 	await setup()
+
+	for command in [COMMAND_PRESET, COMMAND_PRESET_GROUP, COMMAND_MODULES, COMMAND_METER]:
+		print(f"=== Listing { command } ===")
+		result = await command_wait(command, action=ACTION_LIST)
+		print(result)
+	
+	
+	for action_type in [ACTIONTYPE_SITE_PRESET, ACTIONTYPE_PRESET_GROUP]:
+		print(f"=== Listing triggers for { action_type } ===")
+		result = await command_wait(COMMAND_TRIGGER, action=ACTION_GET, actiontype=action_type)
+		print(result)
+
 
 	result = await command_wait(COMMAND_DEVICE, action=ACTION_LIST)
 	devices = result[RPC_RESULT][RPC_DEVICES]
@@ -31,24 +48,43 @@ async def run():
 		print(f"Device properties: { device }")
 		
 		device_id = device[RPC_ID]
+
 		result = await command_wait(COMMAND_APPARATUS, action=ACTION_LIST, id=device_id)
-		attributes = result[RPC_RESULT][RPC_ATTRIBUTES]
+		if not RPC_RESULT in result:
+			logging.error("No command result (command timed out?)")
+			attributes = []
+		elif not RPC_ATTRIBUTES in result[RPC_RESULT]:
+			logging.error(f"No device attributes in command result: { result[RPC_RESULT] }")
+			attributes = []
+		else:
+			attributes = result[RPC_RESULT][RPC_ATTRIBUTES]
 
 		print(f"Attributes: { len (attributes) }")
 		device_attributes = list()
+		device[RPC_ATTRIBUTES] = dict()
+
+		async def fetch_attribute_values():
+			try:
+				print("Fetching attribute values...")
+				result = await command_wait(
+					COMMAND_APPARATUS, action=ACTION_GET, 
+					id=device_id, attributes=device_attributes
+				)
+				device[RPC_ATTRIBUTES] = device[RPC_ATTRIBUTES] | result[RPC_RESULT][RPC_ATTRIBUTES]
+				device_attributes = list()
+			except Exception as e:
+				logging.error(f"Error fetching attribute values for { device_id }: { e }")
+
 		for attribute in attributes:
 			attribute_name = attribute[RPC_NAME]
 			if attribute[RPC_ACCESS] in [ACCESS_READ, ACCESS_READWRITE]:
 				device_attributes.append(attribute_name)
-
-		try:
-			result = await command_wait(
-				COMMAND_APPARATUS, action=ACTION_GET, 
-				id=device_id, attributes=device_attributes
-			)
-			device[RPC_ATTRIBUTES] = result[RPC_RESULT][RPC_ATTRIBUTES]
-		except Exception as e:
-			print(f"Error fetching attributes for { device_id }: { e }")
+			
+			if len(device_attributes) >= MAX_APPARATUS_ATTRIBUTES_LENGTH:
+				await fetch_attribute_values()
+		
+		if len(device_attributes) > 0:
+			await fetch_attribute_values()
 
 		for attribute in attributes:
 			attribute_name = attribute[RPC_NAME]
@@ -59,6 +95,21 @@ async def run():
 				print(attribute_name, attribute)
 
 		print("")
+
+	print("===EVENTS===")
+	#topics = ['ENERGY', 'DEVICE', 'MESSAGE', 'METER', 'PRESET', 'PRESETGROUP', 'ROLE', 'ROOM', 'TRIGGER', 'SITE', 'SITEPRESET', 'UPGRADE', 'USER']
+	topics = ['DEVICE', 'MESSAGE', 'METER', 'PRESET', 'PRESETGROUP', 'ROLE', 'ROOM', 'TRIGGER', 'SITE', 'SITEPRESET', 'UPGRADE', 'USER']
+	await command_wait(COMMAND_EVENTS, action=ACTION_SUBSCRIBE, topics=topics)
+
+	last_ping = time.time()
+	while True:
+		await gateway.get_responses()
+		events = gateway.get_events()
+		for event in events:
+			print(event)
+		
+		if time.time() > last_ping + PING_INTERVAL:
+			await gateway.send_cmd(COMMAND_PING)
 
 	await shutdown()
 
