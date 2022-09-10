@@ -30,7 +30,7 @@ async def shutdown():
 async def run():
 	await setup()
 
-	for command in [COMMAND_PRESET, COMMAND_PRESET_GROUP, COMMAND_MODULES, COMMAND_METER]:
+	for command in [COMMAND_PRESET, COMMAND_PRESET_GROUP, COMMAND_MODULES, COMMAND_METER, COMMAND_ROOM]:
 		print(f"=== Listing { command } ===")
 		result = await command_wait(command, action=ACTION_LIST)
 		print(result)
