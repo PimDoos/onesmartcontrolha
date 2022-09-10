@@ -85,7 +85,7 @@ async def run():
 			if attribute[RPC_ACCESS] in [ACCESS_READ, ACCESS_READWRITE]:
 				device_attributes.append(attribute_name)
 			
-			if len(device_attributes) >= MAX_APPARATUS_ATTRIBUTES_LENGTH:
+			if len(device_attributes) >= MAX_APPARATUS_POLL:
 				await fetch_attribute_values(device, device_id, device_attributes)
 		
 		if len(device_attributes) > 0:
