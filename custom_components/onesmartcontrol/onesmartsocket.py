@@ -111,7 +111,7 @@ class OneSmartSocket:
                             self._event_cache.append(reply_data)
                 except json.JSONDecodeError:
                     _LOGGER.warning("JSON Decode failed:")
-                    _LOGGER.debug("Reply data: \"{ reply }\"")
+                    _LOGGER.debug(f"Reply data: \"{ reply }\"")
                 except Exception as e:
                     _LOGGER.error(f"Unexpected error while reading from the socket: { e }")
 
