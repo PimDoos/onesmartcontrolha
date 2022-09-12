@@ -90,6 +90,9 @@ class OneSmartSocket:
                 data += read_bytes
                 _LOGGER.debug(f"Packet is { len(data) } bytes, waiting for more")
                 continue
+            elif read_bytes[-2:] != b"\r\n":
+                data += read_bytes
+                _LOGGER.debug(f"Packet does not end with linefeed, waiting for more data")
             else:
                 data += read_bytes
                 done_reading = True
