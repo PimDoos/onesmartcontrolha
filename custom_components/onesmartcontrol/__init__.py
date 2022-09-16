@@ -9,7 +9,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from .const import *
 from .onesmartwrapper import OneSmartWrapper
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -31,9 +31,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         wrapper_status = await wrapper.setup()
     except:
         raise ConfigEntryNotReady
-    if wrapper_status == SETUP_FAIL_AUTH:
+    if wrapper_status == OneSmartSetupStatus.FAIL_AUTH:
         raise ConfigEntryAuthFailed
-    elif wrapper_status != SETUP_SUCCESS:
+    elif wrapper_status != OneSmartSetupStatus.SUCCESS:
         raise ConfigEntryNotReady  
 
     for platform in PLATFORMS:

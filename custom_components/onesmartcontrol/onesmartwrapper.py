@@ -20,6 +20,10 @@ from homeassistant.const import (
     FREQUENCY_HERTZ,
     ENERGY_KILO_WATT_HOUR, ENERGY_WATT_HOUR,
     VOLUME_LITERS, TIME_MINUTES,
+    CONF_ATTRIBUTE,
+    SERVICE_TURN_ON, SERVICE_TURN_OFF,
+    CONF_DEVICE_ID, ATTR_NAME,
+    STATE_ON
     
     
 )
@@ -50,12 +54,14 @@ class OneSmartWrapper():
         self.hass = hass
         
         self.cache = dict()
-        self.cache[EVENT_ENERGY_CONSUMPTION] = dict()
-        self.cache[(COMMAND_METER,ACTION_LIST)] = dict()
-        self.cache[(COMMAND_ENERGY,ACTION_TOTAL)] = dict()
-        self.cache[(COMMAND_SITE,ACTION_GET)] = dict()
-        self.cache[(COMMAND_DEVICE,ACTION_LIST)] = dict()
-        self.cache[(COMMAND_APPARATUS,ACTION_GET)] = dict()
+        self.cache[OneSmartEventType.ENERGY_CONSUMPTION] = dict()
+        self.cache[(OneSmartCommand.METER,OneSmartAction.LIST)] = dict()
+        self.cache[(OneSmartCommand.ENERGY,OneSmartAction.TOTAL)] = dict()
+        self.cache[(OneSmartCommand.SITE,OneSmartAction.GET)] = dict()
+        self.cache[(OneSmartCommand.DEVICE,OneSmartAction.LIST)] = dict()
+        self.cache[(OneSmartCommand.APPARATUS,OneSmartAction.GET)] = dict()
+        self.cache[(OneSmartCommand.PRESET,OneSmartAction.LIST)] = dict()
+        self.cache[(OneSmartCommand.ROOM,OneSmartAction.LIST)] = dict()
 
         self.last_update = dict()
         self.last_update[INTERVAL_TRACKER_POLL] = 0
@@ -66,23 +72,25 @@ class OneSmartWrapper():
 
         self.last_apparatus_index = dict()
         self.device_apparatus_attributes = dict()
+        self.entities = []
+
         self.timeout = TimeoutManager()
     
     async def setup(self):
         for socket_name in self.sockets:
             connection_status = await self.connect(socket_name)
-            if connection_status != SETUP_SUCCESS:
+            if connection_status != OneSmartSetupStatus.SUCCESS:
                 return connection_status
         
         # Check cache
         cache = self.get_cache()
 
-        if len(cache[(COMMAND_METER,ACTION_LIST)]) == 0:
-            return SETUP_FAIL_CACHE
-        elif len(cache[(COMMAND_SITE,ACTION_GET)]) == 0:
-            return SETUP_FAIL_CACHE
-        elif len(cache[(COMMAND_DEVICE,ACTION_LIST)]) == 0:
-            return SETUP_FAIL_CACHE
+        if len(cache[(OneSmartCommand.METER,OneSmartAction.LIST)]) == 0:
+            return OneSmartSetupStatus.FAIL_CACHE
+        elif len(cache[(OneSmartCommand.SITE,OneSmartAction.GET)]) == 0:
+            return OneSmartSetupStatus.FAIL_CACHE
+        elif len(cache[(OneSmartCommand.DEVICE,OneSmartAction.LIST)]) == 0:
+            return OneSmartSetupStatus.FAIL_CACHE
 
         async def setup_runners(_event):
             self.runners.append(asyncio.create_task(
@@ -98,7 +106,7 @@ class OneSmartWrapper():
         else:
             await setup_runners(None)
 
-        return SETUP_SUCCESS
+        return OneSmartSetupStatus.SUCCESS
 
     async def connect(self, socket_name):
         socket = self.sockets[socket_name]
@@ -107,15 +115,15 @@ class OneSmartWrapper():
                 connection_success = await socket.connect(self.host, self.port)
         except asyncio.TimeoutError:
             _LOGGER.warning(f"Connection timeout out after { SOCKET_CONNECTION_TIMEOUT } seconds")
-            return SETUP_FAIL_NETWORK
+            return OneSmartSetupStatus.FAIL_NETWORK
         except SOCKET_ERROR as e:
             _LOGGER.warning(f"Connection error: { e }")
-            return SETUP_FAIL_NETWORK
+            return OneSmartSetupStatus.FAIL_NETWORK
         else:
             _LOGGER.info(f"Socket { socket_name }: Established network connection")
         
         if not connection_success:
-            return SETUP_FAIL_NETWORK
+            return OneSmartSetupStatus.FAIL_NETWORK
 
         login_transaction = await socket.authenticate(self.username, self.password)
 
@@ -125,37 +133,41 @@ class OneSmartWrapper():
                 login_status = await self.wait_for_transaction(socket_name, login_transaction)
         except asyncio.TimeoutError:
             _LOGGER.warning(f"Authentication timeout out after { SOCKET_AUTHENTICATION_TIMEOUT } seconds")
-            return SETUP_FAIL_AUTH
+            return OneSmartSetupStatus.FAIL_AUTH
         except Exception as e:
             _LOGGER.warning(f"Authentication error: { e }")
-            return SETUP_FAIL_AUTH
+            return OneSmartSetupStatus.FAIL_AUTH
         else:
             _LOGGER.info(f"Socket { socket_name }: Authentication successful")
         
 
-        if RPC_ERROR in login_status:
-            return SETUP_FAIL_AUTH
+        if OneSmartFieldName.ERROR in login_status:
+            return OneSmartSetupStatus.FAIL_AUTH
         else:
             try:
                 if socket_name == SOCKET_PUSH:
                     # Subscribe to energy events
-                    await self.subscribe(topics=[TOPIC_ENERGY, TOPIC_SITE])
+                    await self.subscribe(topics=[OneSmartTopic.ENERGY, OneSmartTopic.SITE, OneSmartTopic.PRESET])
                 elif socket_name == SOCKET_POLL:
                     # Set update flags
-                    self.set_update_flag((COMMAND_SITE,ACTION_GET))
-                    self.set_update_flag((COMMAND_METER,ACTION_LIST))
-                    self.set_update_flag((COMMAND_DEVICE,ACTION_LIST))
+                    self.set_update_flag((OneSmartCommand.SITE,OneSmartAction.GET))
+                    self.set_update_flag((OneSmartCommand.METER,OneSmartAction.LIST))
+                    self.set_update_flag((OneSmartCommand.DEVICE,OneSmartAction.LIST))
+                    self.set_update_flag((OneSmartCommand.PRESET,OneSmartAction.LIST))
+                    self.set_update_flag((OneSmartCommand.ROOM,OneSmartAction.LIST))
                     self.last_update[INTERVAL_TRACKER_DEFINITIONS] = time()
 
-                    self.set_update_flag((COMMAND_ENERGY,ACTION_TOTAL))
+                    self.set_update_flag((OneSmartCommand.ENERGY,OneSmartAction.TOTAL))
                     self.last_update[INTERVAL_TRACKER_POLL] = time()
                     
                     # Wait for incoming data
                     await self.handle_update_flags()
+
+                    await self.discover_entities()
             except:
-                return SETUP_FAIL_NETWORK
+                return OneSmartSetupStatus.FAIL_NETWORK
             else:
-                return SETUP_SUCCESS
+                return OneSmartSetupStatus.SUCCESS
 
     """Make sure the selected socket object is connected"""
     async def ensure_connected_socket(self, socket_name):
@@ -166,7 +178,7 @@ class OneSmartWrapper():
                 # Check if socket status is connected
                 if not socket.is_connected or force_reconnect:
                     connection_status = await self.connect(socket_name)
-                    if not connection_status == SETUP_SUCCESS:
+                    if not connection_status == OneSmartSetupStatus.SUCCESS:
                         _LOGGER.warning(f"Reconnect failed. Trying again in {SOCKET_RECONNECT_DELAY} seconds. Attempt { connect_attempt + 1} of { SOCKET_RECONNECT_RETRIES }.")
                         await asyncio.sleep(SOCKET_RECONNECT_DELAY)
                     else:
@@ -175,7 +187,7 @@ class OneSmartWrapper():
                     continue
 
                 # Try ping
-                ping_result = await self.command_wait(socket_name, COMMAND_PING)
+                ping_result = await self.command_wait(socket_name, OneSmartCommand.PING)
 
                 if ping_result == None:
                     _LOGGER.warning(f"Ping to server timed out. Reconnecting.")
@@ -208,15 +220,17 @@ class OneSmartWrapper():
                 # Update caches
                 if time() > self.last_update[INTERVAL_TRACKER_DEFINITIONS] + SCAN_INTERVAL_DEFINITIONS:
                     _LOGGER.info(f"Updating definitions")
-                    self.set_update_flag((COMMAND_SITE,ACTION_GET))
-                    self.set_update_flag((COMMAND_METER,ACTION_LIST))
-                    # self.set_update_flag((COMMAND_DEVICE,ACTION_LIST))
+                    self.set_update_flag((OneSmartCommand.SITE,OneSmartAction.GET))
+                    self.set_update_flag((OneSmartCommand.METER,OneSmartAction.LIST))
+                    # self.set_update_flag((OneSmartCommand.DEVICE,OneSmartAction.LIST))
+                    # self.set_update_flag((OneSmartCommand.ROOM,OneSmartAction.LIST))
+                    self.set_update_flag((OneSmartCommand.PRESET,OneSmartAction.LIST))
                     self.last_update[INTERVAL_TRACKER_DEFINITIONS] = time()
                     
 
                 if time() > self.last_update[INTERVAL_TRACKER_POLL] + SCAN_INTERVAL_CACHE:
                     _LOGGER.info(f"Updating cache") 
-                    self.set_update_flag((COMMAND_ENERGY,ACTION_TOTAL))
+                    self.set_update_flag((OneSmartCommand.ENERGY,OneSmartAction.TOTAL))
                     self.last_update[INTERVAL_TRACKER_POLL] = time()
                     
                 
@@ -241,26 +255,32 @@ class OneSmartWrapper():
             socket = self.sockets[socket_name]
         
             try:
-                await socket.get_responses()
-                
-                # Read events
-                events = socket.get_events()
-                
-                # Handle events
-                for event in events:
-                    if event[RPC_EVENT] == EVENT_ENERGY_CONSUMPTION and len(self.cache[(COMMAND_METER,ACTION_LIST)]) > 0:
-                        for reading in event[RPC_DATA][RPC_VALUES]:
-                            meter_value = reading["value"]
-                            self.cache[EVENT_ENERGY_CONSUMPTION][reading["id"]] = meter_value
-                    elif event[RPC_EVENT] == EVENT_SITE_UPDATE:
-                        self.cache[EVENT_SITE_UPDATE] = event[RPC_DATA]
+                async with self.timeout.async_timeout(SOCKET_COMMAND_TIMEOUT):
+                    await socket.get_responses()
+                    
+                    # Read events
+                    events = socket.get_events()
+                    
+                    # Handle events
+                    for event in events:
+                        if event[OneSmartFieldName.EVENT] == OneSmartEventType.ENERGY_CONSUMPTION and len(self.cache[(OneSmartCommand.METER,OneSmartAction.LIST)]) > 0:
+                            for reading in event[OneSmartFieldName.DATA][OneSmartFieldName.VALUES]:
+                                meter_value = reading["value"]
+                                self.cache[OneSmartEventType.ENERGY_CONSUMPTION][reading["id"]] = meter_value
+                        elif event[OneSmartFieldName.EVENT] == OneSmartEventType.SITE_UPDATE:
+                            self.cache[OneSmartEventType.SITE_UPDATE] = event[OneSmartFieldName.DATA]
+                        elif event[OneSmartFieldName.EVENT] == OneSmartEventType.PRESET_PERFORM:
+                            preset_id = event[OneSmartFieldName.DATA][OneSmartFieldName.ID]
+                            self.cache[(OneSmartCommand.PRESET,OneSmartAction.LIST)][preset_id][OneSmartFieldName.ACTIVE] = True
+                            async_dispatcher_send(self.hass, OneSmartUpdateTopic.POLL)
 
-                async_dispatcher_send(self.hass, ONESMART_UPDATE_PUSH)
+                    async_dispatcher_send(self.hass, OneSmartUpdateTopic.PUSH)
 
-                # Send queued push commands
-                for queued_command in self.command_queue:
-                    await self.command(socket_name, queued_command.pop("command"), kwargs = queued_command)
-
+                    # Send queued push commands
+                    for queued_command in self.command_queue:
+                        await self.command(socket_name, queued_command.pop("command"), kwargs = queued_command)
+            except TimeoutError:
+                _LOGGER.debug(f"Timeout in { socket_name } while waiting for responses")
 
             except Exception as e:
                 _LOGGER.error(f"Error in { socket_name } gateway wrapper: { e }")
@@ -273,16 +293,19 @@ class OneSmartWrapper():
             task.cancel()
 
         for socket_name in self.sockets:
-            await self.sockets[socket_name].close()
+            try:
+                await self.sockets[socket_name].close()
+            except:
+                pass
         
 
     """Send command to the socket and return the transaction id"""
-    async def command(self, socket_name, command, **kwargs) -> int:
+    async def command(self, socket_name, command: OneSmartCommand, **kwargs) -> int:
         socket = self.sockets[socket_name]
         return await socket.send_cmd(command, **kwargs)
 
     """Send command to the socket and return the transaction data"""
-    async def command_wait(self, socket_name, command, **kwargs):
+    async def command_wait(self, socket_name, command: OneSmartCommand, **kwargs):
         transaction_id = await self.command(socket_name, command, **kwargs)
 
         # Wait for transaction to return
@@ -314,7 +337,7 @@ class OneSmartWrapper():
 
     """Subscribe the socket to the specified event topics"""
     async def subscribe(self, topics: list):
-        return await self.command(socket_name=SOCKET_PUSH, command=COMMAND_EVENTS, action=ACTION_SUBSCRIBE, topics=topics)
+        return await self.command(socket_name=SOCKET_PUSH, command=OneSmartCommand.EVENTS, action=OneSmartAction.SUBSCRIBE, topics=topics)
 
 
     def set_update_flag(self, flag):
@@ -331,54 +354,67 @@ class OneSmartWrapper():
                 flag_command = flag[0]
                 flag_action = flag[1]
 
-                if flag_command in [COMMAND_SITE, COMMAND_METER, COMMAND_DEVICE, COMMAND_ENERGY]:
+                if flag_command in [OneSmartCommand.SITE, OneSmartCommand.METER, OneSmartCommand.DEVICE, OneSmartCommand.ENERGY, OneSmartCommand.ROOM, OneSmartCommand.PRESET]:
                     transaction = await self.command_wait(SOCKET_POLL, command=flag_command, action=flag_action)
                     if transaction == None:
                         # Skip if transaction returns no data.
                         continue
-                    elif not RPC_RESULT in transaction:
+                    elif not OneSmartFieldName.RESULT in transaction:
                         # TODO: Set depending sensors to unavailable
                         continue
                     else:
-                        transaction_result = transaction[RPC_RESULT]
+                        transaction_result = transaction[OneSmartFieldName.RESULT]
 
-                    if flag_command == COMMAND_SITE:
+                    if flag_command == OneSmartCommand.SITE:
                         # Fill cache with RPC result
                         self.cache[flag] = transaction_result
 
                         # Also store in Site Event cache
-                        self.cache[EVENT_SITE_UPDATE] = transaction_result
+                        self.cache[OneSmartEventType.SITE_UPDATE] = transaction_result
 
-                        if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
-                            dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
+                        if not OneSmartUpdateTopic.DEFINITIONS in dispatcher_topics:
+                            dispatcher_topics.append(OneSmartUpdateTopic.DEFINITIONS)
 
-                    elif flag_command == COMMAND_METER:
+                    elif flag_command == OneSmartCommand.METER:
                         # Fill cache with RPC result (in corresponding subkey)
-                        if RPC_METERS in transaction_result:
-                            self.cache[flag] = transaction_result[RPC_METERS]
+                        if OneSmartFieldName.METERS in transaction_result:
+                            self.cache[flag] = transaction_result[OneSmartFieldName.METERS]
 
-                            if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
-                                dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
+                            if not OneSmartUpdateTopic.DEFINITIONS in dispatcher_topics:
+                                dispatcher_topics.append(OneSmartUpdateTopic.DEFINITIONS)
 
-                    elif flag_command == COMMAND_ENERGY:
-                        if RPC_VALUES in transaction_result:
-                            for entry in transaction_result[RPC_VALUES]:
-                                self.cache[flag][entry[RPC_ID]] = entry[RPC_VALUE]
+                    elif flag_command == OneSmartCommand.ENERGY:
+                        if OneSmartFieldName.VALUES in transaction_result:
+                            for entry in transaction_result[OneSmartFieldName.VALUES]:
+                                self.cache[flag][entry[OneSmartFieldName.ID]] = entry[OneSmartFieldName.VALUE]
 
-                            if not ONESMART_UPDATE_POLL in dispatcher_topics:
-                                dispatcher_topics.append(ONESMART_UPDATE_POLL)
-                    elif flag_command == COMMAND_DEVICE:
-                        if RPC_DEVICES in transaction_result:
-                            for entry in transaction_result[RPC_DEVICES]:
-                                self.cache[flag][entry[RPC_ID]] = entry
-                            await self.discover_apparatus()
+                            if not OneSmartUpdateTopic.POLL in dispatcher_topics:
+                                dispatcher_topics.append(OneSmartUpdateTopic.POLL)
+                    elif flag_command == OneSmartCommand.DEVICE:
+                        if OneSmartFieldName.DEVICES in transaction_result:
+                            for entry in transaction_result[OneSmartFieldName.DEVICES]:
+                                self.cache[flag][entry[OneSmartFieldName.ID]] = entry
+                            
+                            if not OneSmartUpdateTopic.DEFINITIONS in dispatcher_topics:
+                                dispatcher_topics.append(OneSmartUpdateTopic.DEFINITIONS)
+                    elif flag_command == OneSmartCommand.PRESET:
+                        if OneSmartFieldName.PRESETS in transaction_result:
+                            for entry in transaction_result[OneSmartFieldName.PRESETS]:
+                                self.cache[flag][entry[OneSmartFieldName.ID]] = entry
 
-                            if not ONESMART_UPDATE_DEFINITIONS in dispatcher_topics:
-                                dispatcher_topics.append(ONESMART_UPDATE_DEFINITIONS)
+                            if not OneSmartUpdateTopic.POLL in dispatcher_topics:
+                                dispatcher_topics.append(OneSmartUpdateTopic.POLL)
+                    elif flag_command == OneSmartCommand.ROOM:
+                        if OneSmartFieldName.ROOMS in transaction_result:
+                            for entry in transaction_result[OneSmartFieldName.ROOMS]:
+                                self.cache[flag][entry[OneSmartFieldName.ID]] = entry
 
-                elif flag_command == COMMAND_APPARATUS:
-                    if flag_action == ACTION_LIST:
-                        for device_id in self.cache[(COMMAND_DEVICE, ACTION_LIST)]:
+                            if not OneSmartUpdateTopic.DEFINITIONS in dispatcher_topics:
+                                dispatcher_topics.append(OneSmartUpdateTopic.DEFINITIONS)
+
+                elif flag_command == OneSmartCommand.APPARATUS:
+                    if flag_action == OneSmartAction.LIST:
+                        for device_id in self.cache[(OneSmartCommand.DEVICE, OneSmartAction.LIST)]:
                             transaction = await self.command_wait(
                                 SOCKET_POLL,
                                 command=flag_command, action=flag_action, 
@@ -386,12 +422,12 @@ class OneSmartWrapper():
                             )
                             if transaction is None:
                                 self.cache[flag] = None
-                            elif not RPC_RESULT in transaction:
+                            elif not OneSmartFieldName.RESULT in transaction:
                                 self.cache[flag] = None
-                            elif not RPC_ATTRIBUTES in transaction[RPC_RESULT]:
+                            elif not OneSmartFieldName.ATTRIBUTES in transaction[OneSmartFieldName.RESULT]:
                                 self.cache[flag] = None
                             else:
-                                self.cache[flag] = transaction[RPC_RESULT][RPC_ATTRIBUTES]
+                                self.cache[flag] = transaction[OneSmartFieldName.RESULT][OneSmartFieldName.ATTRIBUTES]
             except Exception as e:
                 _LOGGER.error(f"Error while handling update flag { flag }: { e }")
 
@@ -404,9 +440,9 @@ class OneSmartWrapper():
     async def poll_apparatus(self):
         # Update apparatus values
         for device_id in self.device_apparatus_attributes:
-            devices = self.cache[(COMMAND_DEVICE,ACTION_LIST)]
+            devices = self.cache[(OneSmartCommand.DEVICE,OneSmartAction.LIST)]
             device = devices[device_id]
-            device_name = device[RPC_NAME]
+            device_name = device[OneSmartFieldName.NAME]
 
             attributes = self.device_apparatus_attributes[device_id]
             attribute_names = [attribute_name for attribute_name in attributes]
@@ -433,17 +469,17 @@ class OneSmartWrapper():
             await self.ensure_connected_socket(SOCKET_POLL)
             transaction = await self.command_wait(
                 SOCKET_POLL,
-                command=COMMAND_APPARATUS, action=ACTION_GET, 
+                command=OneSmartCommand.APPARATUS, action=OneSmartAction.GET, 
                 id=device_id, attributes=split_attributes
             )
             if transaction == None:
                 _LOGGER.warning(f"Could not update {split_attributes} for '{device_name}': Client read timed out")
                 continue
-            if RPC_ERROR in transaction[RPC_RESULT]:
-                _LOGGER.warning(f"Could not update {split_attributes} for '{device_name}': Server responded with {transaction[RPC_RESULT]}")
+            if OneSmartFieldName.ERROR in transaction[OneSmartFieldName.RESULT]:
+                _LOGGER.warning(f"Could not update {split_attributes} for '{device_name}': Server responded with {transaction[OneSmartFieldName.RESULT]}")
             else:
                 try:
-                    values_new = transaction[RPC_RESULT][RPC_ATTRIBUTES]
+                    values_new = transaction[OneSmartFieldName.RESULT][OneSmartFieldName.ATTRIBUTES]
                     for value_name in values_new:
                         value = values_new[value_name]
                         if isinstance(value, int):
@@ -453,15 +489,15 @@ class OneSmartWrapper():
                                 if values_new[value_name] < 1:
                                     values_new[value_name] = 0
 
-                    if device_id in self.cache[(COMMAND_APPARATUS,ACTION_GET)]:
-                        values_cache = self.cache[(COMMAND_APPARATUS,ACTION_GET)][device_id]
+                    if device_id in self.cache[(OneSmartCommand.APPARATUS,OneSmartAction.GET)]:
+                        values_cache = self.cache[(OneSmartCommand.APPARATUS,OneSmartAction.GET)][device_id]
                     else:
                         values_cache = {}
-                    self.cache[(COMMAND_APPARATUS,ACTION_GET)][device_id] = values_cache | values_new
+                    self.cache[(OneSmartCommand.APPARATUS,OneSmartAction.GET)][device_id] = values_cache | values_new
                 except Exception as e:
                     _LOGGER.warning(f"Could not update {split_attributes} for '{device_name}': { e } ''")
             
-        async_dispatcher_send(self.hass, ONESMART_UPDATE_APPARATUS)
+        async_dispatcher_send(self.hass, OneSmartUpdateTopic.APPARATUS)
 
     def get_cache(self, cache_name = None):
         if cache_name == None:
@@ -469,122 +505,228 @@ class OneSmartWrapper():
         else:
             return self.cache[cache_name]
 
-    async def discover_apparatus(self):
-        for device_id in self.cache[(COMMAND_DEVICE,ACTION_LIST)]:
+    async def discover_entities(self):
+        self.entities = dict()
+        for platform_name in Platform:
+            self.entities[platform_name] = list()
+
+        # Discover device attributes
+        for device_id in self.cache[(OneSmartCommand.DEVICE,OneSmartAction.LIST)]:
             try:
-                device = self.cache[(COMMAND_DEVICE,ACTION_LIST)][device_id]
-                if(device[RPC_VISIBLE] == False):
+                device = self.cache[(OneSmartCommand.DEVICE,OneSmartAction.LIST)][device_id]
+                device_name = device[OneSmartFieldName.NAME]
+                if(device[OneSmartFieldName.VISIBLE] == False):
                     continue
 
-                transaction = await self.command_wait(SOCKET_POLL, COMMAND_APPARATUS, action=ACTION_LIST, id=device_id)
-                attributes = transaction[RPC_RESULT][RPC_ATTRIBUTES]
+                transaction = await self.command_wait(SOCKET_POLL, OneSmartCommand.APPARATUS, action=OneSmartAction.LIST, id=device_id)
+                attributes = transaction[OneSmartFieldName.RESULT][OneSmartFieldName.ATTRIBUTES]
                 self.device_apparatus_attributes[device_id] = dict()
+                
 
                 for attribute in attributes:
-                    if attribute[RPC_ACCESS] == ACCESS_READ:
-                        if attribute[RPC_TYPE] in [TYPE_NUMBER, TYPE_REAL]:
-                            attribute[CONF_PLATFORM] = Platform.SENSOR
-                            attribute[ATTR_STATE_CLASS] = SensorStateClass.MEASUREMENT
+                    attribute_name: str = attribute[OneSmartFieldName.NAME]
+                    entity = dict()
+                    entity[ONESMART_CACHE] = (OneSmartCommand.APPARATUS,OneSmartAction.GET)
+                    entity[ONESMART_KEY] = f"{device_id}.{attribute_name}"
+                    entity[CONF_ATTRIBUTE] = attribute
+                    entity[CONF_DEVICE_ID] = device_id
+                    entity[ATTR_NAME] = f"{device_name} {attribute_name.replace('_',' ').title()}"
+                    entity[OneSmartUpdateTopic] = OneSmartUpdateTopic.APPARATUS
+                    use_entity = False
+
+                    if attribute[OneSmartFieldName.ACCESS] == OneSmartAccessLevel.READ:
+                        if attribute[OneSmartFieldName.TYPE] in [OneSmartDataType.NUMBER, OneSmartDataType.REAL]:
+                            
+                            entity[CONF_PLATFORM] = Platform.SENSOR
+                            entity[ATTR_STATE_CLASS] = SensorStateClass.MEASUREMENT
+                            
                             # Temperature sensors
-                            if "_temp" in attribute[RPC_NAME]:
-                                attribute[ATTR_UNIT_OF_MEASUREMENT] = TEMP_CELSIUS
-                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.TEMPERATURE
-                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                                continue
+                            if "_temp" in attribute[OneSmartFieldName.NAME]:
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = TEMP_CELSIUS
+                                entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.TEMPERATURE
+                                use_entity = True
 
-                            elif "_percent" in attribute[RPC_NAME] or "efficiency" in attribute[RPC_NAME]:
-                                attribute[ATTR_UNIT_OF_MEASUREMENT] = PERCENTAGE
-                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                                continue
+                            elif "_percent" in attribute[OneSmartFieldName.NAME] or "efficiency" in attribute[OneSmartFieldName.NAME]:
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = PERCENTAGE
+                                use_entity = True
                             
+                            elif "co2_level" in attribute[OneSmartFieldName.NAME]:
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = CONCENTRATION_PARTS_PER_MILLION
+                                entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.CO2
+                                use_entity = True
+                            
+                            elif "_rpm" in attribute[OneSmartFieldName.NAME]:
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = "rpm"
+                                use_entity = True
+                            
+                            elif "flow_rate_4graph" in attribute[OneSmartFieldName.NAME]:
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = f"{VOLUME_LITERS}/{TIME_MINUTES}"
+                                use_entity = True
+                              
+                            elif "_power" in attribute[OneSmartFieldName.NAME]:
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = POWER_WATT
+                                entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.POWER
+                                if "reactive" in attribute[OneSmartFieldName.NAME]:
+                                    entity[ATTR_UNIT_OF_MEASUREMENT] = None
+                                    entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.POWER_FACTOR
 
-                            elif "co2_level" in attribute[RPC_NAME]:
-                                attribute[ATTR_UNIT_OF_MEASUREMENT] = CONCENTRATION_PARTS_PER_MILLION
-                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.CO2
-                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                                continue
-                            
-                            elif "_rpm" in attribute[RPC_NAME]:
-                                attribute[ATTR_UNIT_OF_MEASUREMENT] = "rpm"
-                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                                continue
-                            
-                            elif "flow_rate_4graph" in attribute[RPC_NAME]:
-                                attribute[ATTR_UNIT_OF_MEASUREMENT] = f"{VOLUME_LITERS}/{TIME_MINUTES}"
-                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                                continue
-                            
-                            
-                            elif "_power" in attribute[RPC_NAME]:
-                                attribute[ATTR_UNIT_OF_MEASUREMENT] = POWER_WATT
-                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.POWER
-                                if "reactive" in attribute[RPC_NAME]:
-                                    attribute[ATTR_UNIT_OF_MEASUREMENT] = None
-                                    attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.POWER_FACTOR
+                                use_entity = True
 
-                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                                continue
-
-                            elif "current" in attribute[RPC_NAME]:
-                                attribute[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_CURRENT_AMPERE
-                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.CURRENT
-                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                                continue
+                            elif "current" in attribute[OneSmartFieldName.NAME]:
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_CURRENT_AMPERE
+                                entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.CURRENT
+                                use_entity = True
                             
-                            elif "voltage" in attribute[RPC_NAME]:
-                                attribute[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_POTENTIAL_VOLT
-                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.VOLTAGE
-                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                                continue
+                            elif "voltage" in attribute[OneSmartFieldName.NAME]:
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_POTENTIAL_VOLT
+                                entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.VOLTAGE
+                                use_entity = True
                             
-                            elif "frequency" in attribute[RPC_NAME]:
-                                attribute[ATTR_UNIT_OF_MEASUREMENT] = FREQUENCY_HERTZ
-                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.FREQUENCY
-                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                                continue
+                            elif "frequency" in attribute[OneSmartFieldName.NAME]:
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = FREQUENCY_HERTZ
+                                entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.FREQUENCY
+                                use_entity = True
 
-                            elif "e_total" == attribute[RPC_NAME]:
-                                attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
-                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
-                                attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL
-                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                                continue
+                            elif "e_total" == attribute[OneSmartFieldName.NAME]:
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
+                                entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
+                                entity[ATTR_STATE_CLASS] = SensorStateClass.TOTAL
+                                use_entity = True
 
-                            elif "e_day" == attribute[RPC_NAME]:
-                                attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
-                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
-                                attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
-                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                                continue
+                            elif "e_day" == attribute[OneSmartFieldName.NAME]:
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
+                                entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
+                                entity[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
+                                use_entity = True
                             
-                            elif "_energy_" in attribute[RPC_NAME] and device[RPC_TYPE] == "ENERGY_PROCON_ATW":
-                                attribute[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_WATT_HOUR
-                                attribute[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
-                                attribute[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
-                                self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                                continue
+                            elif "_energy_" in attribute[OneSmartFieldName.NAME] and device[OneSmartFieldName.TYPE] == "ENERGY_PROCON_ATW":
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_WATT_HOUR
+                                entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
+                                entity[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
+                                use_entity = True
 
-                        elif attribute[RPC_TYPE] in [TYPE_STRING]:
-                            attribute[CONF_PLATFORM] = Platform.SENSOR
-                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                            continue
+                        elif attribute[OneSmartFieldName.TYPE] in [OneSmartDataType.STRING]:
+                            entity[CONF_PLATFORM] = Platform.SENSOR
+                            use_entity = True
 
-                    elif attribute[RPC_ACCESS] == ACCESS_READWRITE:
-                        if "operating_mode" in attribute[RPC_NAME]:
-                            attribute[CONF_PLATFORM] = Platform.SENSOR
-                            self.device_apparatus_attributes[device_id][attribute[RPC_NAME]] = attribute
-                            continue
-            except Exception as e:
-                _LOGGER.error(f"Error while discovering attributes for device { device[RPC_NAME] }: { e }")
+                    elif attribute[OneSmartFieldName.ACCESS] == OneSmartAccessLevel.READWRITE:
+                        if "operating_mode" in attribute[OneSmartFieldName.NAME]:
+                            entity[CONF_PLATFORM] = Platform.SENSOR
+                            use_entity = True
+                        elif OneSmartFieldName.ENUM in attribute:
+                            enum_values = attribute[OneSmartFieldName.ENUM]
+                            if "on" in enum_values and "off" in enum_values:
+                                entity[CONF_PLATFORM] = Platform.SWITCH
+                                entity[SERVICE_TURN_ON] = {
+                                    "command":OneSmartCommand.APPARATUS, 
+                                    OneSmartFieldName.ACTION:OneSmartAction.SET, 
+                                    OneSmartFieldName.ID:device_id, 
+                                    OneSmartFieldName.ATTRIBUTES:{attribute_name:"on"}
+                                }
+                                entity[SERVICE_TURN_OFF] = {
+                                    "command":OneSmartCommand.APPARATUS, 
+                                    OneSmartFieldName.ACTION:OneSmartAction.SET, 
+                                    OneSmartFieldName.ID:device_id, 
+                                    OneSmartFieldName.ATTRIBUTES:{attribute_name:"off"}
+                                }
             
-    def get_apparatus_attributes(self, device_id = None):
-        if device_id != None:
-            if device_id in self.device_apparatus_attributes:
-                return self.device_apparatus_attributes[device_id]
-            else:
-                return None
+                                entity[STATE_ON] = "on"
+                                use_entity = True
+
+                    if use_entity == True:
+                        # Append the entity
+                        self.entities[entity[CONF_PLATFORM]].append(entity)
+
+                        # Mark the attribute for polling
+                        self.device_apparatus_attributes[device_id][attribute[OneSmartFieldName.NAME]] = attribute
+                
+            except Exception as e:
+                _LOGGER.error(f"Error while discovering entities for device { device[OneSmartFieldName.NAME] }: { e }")
+
+        # Preset entities
+        for room_id in self.cache[(OneSmartCommand.ROOM,OneSmartAction.LIST)]:
+            try:
+                room = self.cache[(OneSmartCommand.ROOM,OneSmartAction.LIST)][room_id]
+                room_name = room[OneSmartFieldName.NAME]
+                if(room[OneSmartFieldName.VISIBLE] == False):
+                    continue
+
+                room_presets = dict()
+                for group_name in OneSmartGroupType:
+                    room_presets[group_name] = dict()
+            
+                for preset_id in self.cache[(OneSmartCommand.PRESET,OneSmartAction.LIST)]:
+                    preset = self.cache[(OneSmartCommand.PRESET,OneSmartAction.LIST)][preset_id]
+                    if preset[OneSmartCommand.ROOM] == room_id:
+                        room_presets[preset[OneSmartFieldName.GROUP]][preset[OneSmartFieldName.TYPE]] = preset
+
+                for group_name in room_presets:
+                    group_presets = room_presets[group_name]
+
+                    for area_id in range(0,8):
+                        entity = dict()
+                        use_entity = False
+
+                        entity[ONESMART_CACHE] = (OneSmartCommand.PRESET,OneSmartAction.LIST)
+                        entity[OneSmartUpdateTopic] = OneSmartUpdateTopic.POLL
+
+                        # if group_name == OneSmartGroupType.LIGHTS:
+                        #     entity[CONF_PLATFORM] = Platform.LIGHT      
+                        # else:
+                        entity[CONF_PLATFORM] = Platform.SWITCH
+
+                        # Room preset
+                        if area_id == 0:
+                            preset_on_type = OneSmartPresetType.ROOMON.format(1)
+                            preset_off_type = OneSmartPresetType.ROOMOFF
+
+                        # Area presets
+                        else:
+                            preset_on_type = OneSmartPresetType.AREAON.format(area_id)
+                            preset_off_type = OneSmartPresetType.AREAOFF.format(area_id)
+
+                        if preset_on_type in group_presets and preset_off_type in group_presets:
+                            preset_on = group_presets[preset_on_type]
+                            preset_off = group_presets[preset_off_type]
+
+                            preset_on_name = preset_on[OneSmartFieldName.NAME]
+                            preset_on_id = preset_on[OneSmartFieldName.ID]
+
+                            preset_off_id = preset_off[OneSmartFieldName.ID]
+
+                            if area_id == 0:
+                                entity[ATTR_NAME] = f"{room_name.title()} {group_name.title()}"
+                            else:
+                                entity[ATTR_NAME] = f"{room_name.title()} {group_name.title()} {preset_on_name.title()}"
+
+                            entity[SERVICE_TURN_ON] = {
+                                "command":OneSmartCommand.PRESET, OneSmartFieldName.ACTION:OneSmartAction.PERFORM, OneSmartFieldName.ID:preset_on_id
+                            }
+                            entity[SERVICE_TURN_OFF] = {
+                                "command":OneSmartCommand.PRESET, OneSmartFieldName.ACTION:OneSmartAction.PERFORM, OneSmartFieldName.ID:preset_off_id
+                            }
+                            entity[ONESMART_KEY] = f"{preset_on_id}.{OneSmartFieldName.ACTIVE}"
+
+                            # Append the entity
+                            self.entities[entity[CONF_PLATFORM]].append(entity)
+
+            except Exception as e:
+                _LOGGER.error(f"Error while discovering entities for room { room[OneSmartFieldName.NAME] }: { e }")
+            
+    # def get_apparatus_attributes(self, device_id = None):
+    #     if device_id != None:
+    #         if device_id in self.device_apparatus_attributes:
+    #             return self.device_apparatus_attributes[device_id]
+    #         else:
+    #             return None
+    #     else:
+    #         return self.device_apparatus_attributes
+    
+    def get_platform_entities(self, platform: Platform):
+        if platform in self.entities:
+            return self.entities[platform]
         else:
-            return self.device_apparatus_attributes
+            return list()
 
     def split_list(self, lst, n):  
         for i in range(0, len(lst), n): 

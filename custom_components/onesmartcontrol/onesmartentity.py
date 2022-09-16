@@ -39,13 +39,13 @@ class OneSmartEntity(Entity):
 
     @property
     def device_info(self):
-        site = self.cache[(COMMAND_SITE,ACTION_GET)]
+        site = self.cache[(OneSmartCommand.SITE,OneSmartAction.GET)]
         return {
-            ATTR_IDENTIFIERS: {(DOMAIN, site[SITE_MAC]), (DOMAIN, site[SITE_NODEID])},
-            ATTR_DEFAULT_NAME: site[RPC_NAME],
+            ATTR_IDENTIFIERS: {(DOMAIN, site[OneSmartFieldName.MAC]), (DOMAIN, site[OneSmartFieldName.NODEID])},
+            ATTR_DEFAULT_NAME: site[OneSmartFieldName.NAME],
             "default_manufacturer": DEVICE_MANUFACTURER,
-            ATTR_SW_VERSION: site[SITE_VERSION],
-            ATTR_VIA_DEVICE: (DOMAIN, site[SITE_NODEID])
+            ATTR_SW_VERSION: site[OneSmartFieldName.VERSION],
+            ATTR_VIA_DEVICE: (DOMAIN, site[OneSmartFieldName.NODEID])
         }
     @callback
     def update_from_latest_data(self):
