@@ -76,7 +76,7 @@ Commands
 |user|get list|User accounts|
 |upgrade|check perform|Software updates|
 |sitepreset||Site preset triggers|
-|shell|||
+|shell|?|?|
 |trigger|get|Trigger links|
 
 **Action domains**
@@ -105,6 +105,8 @@ Commands
 |apparatus|get|id (device id), attributes (array of attribute names)|Returns the value of an attribute|
 |apparatus|set|id (device id), attributes (dict?)|Set the value of a given attribute|
 |apparatus|list|Device ID: `id`|List available device attributes for a given device ID|
+|events|subscribe|`topics`: List of topics (see below)|Subscribe to events for the specified topics|
+|events|unsubscribe|`topics`: List of topics (see below)|Unsubscribe to events for the specified topics|
 |energy|total||Return total values for all meter objects|
 |gettoken|get||Returns a Bearer token for portal gateway functions|
 |room|list||List all rooms|
@@ -112,14 +114,13 @@ Commands
 |preset|list||Get all presets (actions)|
 |meter|list||Get all meters|
 |modules|list||List installed software modules|
-|roles|list||List available user roles|
+|role|list||List available user roles|
 |room|add||Add a new room|
 |room|list||List rooms|
 |room|update||Update room attributes|
 |room|delete||Remove a room|
 |presetgroup|list||Get all scenes / automations|
 |device|list||Get all devices|
-|shell||username,password|Presumably set a password for a SSH user|
 |site|get||Gets system information|
 |site|update|name|Update the system name|
 |sitepreset|perform|id|Activate a sitepreset|
@@ -134,7 +135,7 @@ Events
 |Topic|Event|Description|
 |-----|-----|-----------|
 |APPARATUS|||
-|DEVICE|device_input||
+|DEVICE|device_input|Called when an input on a device is activated, contains `id` from the triggering device |
 |DEVICE|device_data||
 |DEVICE|device_status||
 |DEVICE|discovery_device_discovered||
