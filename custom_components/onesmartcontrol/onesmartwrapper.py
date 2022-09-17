@@ -23,7 +23,7 @@ from homeassistant.const import (
     CONF_ATTRIBUTE,
     SERVICE_TURN_ON, SERVICE_TURN_OFF,
     CONF_DEVICE_ID, ATTR_NAME,
-    STATE_ON
+    STATE_ON, STATE_OFF
     
     
 )
@@ -31,6 +31,9 @@ from homeassistant.components.sensor import (
     SensorDeviceClass, 
     SensorStateClass,
     ATTR_STATE_CLASS
+)
+from homeassistant.components.light import (
+    ColorMode, ATTR_SUPPORTED_COLOR_MODES
 )
 from time import time
 
@@ -541,65 +544,65 @@ class OneSmartWrapper():
                             entity[ATTR_STATE_CLASS] = SensorStateClass.MEASUREMENT
                             
                             # Temperature sensors
-                            if "_temp" in attribute[OneSmartFieldName.NAME]:
+                            if "_temp" in attribute_name:
                                 entity[ATTR_UNIT_OF_MEASUREMENT] = TEMP_CELSIUS
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.TEMPERATURE
                                 use_entity = True
 
-                            elif "_percent" in attribute[OneSmartFieldName.NAME] or "efficiency" in attribute[OneSmartFieldName.NAME]:
+                            elif "_percent" in attribute_name or "efficiency" in attribute_name:
                                 entity[ATTR_UNIT_OF_MEASUREMENT] = PERCENTAGE
                                 use_entity = True
                             
-                            elif "co2_level" in attribute[OneSmartFieldName.NAME]:
+                            elif "co2_level" in attribute_name:
                                 entity[ATTR_UNIT_OF_MEASUREMENT] = CONCENTRATION_PARTS_PER_MILLION
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.CO2
                                 use_entity = True
                             
-                            elif "_rpm" in attribute[OneSmartFieldName.NAME]:
+                            elif "_rpm" in attribute_name:
                                 entity[ATTR_UNIT_OF_MEASUREMENT] = "rpm"
                                 use_entity = True
                             
-                            elif "flow_rate_4graph" in attribute[OneSmartFieldName.NAME]:
+                            elif "flow_rate_4graph" in attribute_name:
                                 entity[ATTR_UNIT_OF_MEASUREMENT] = f"{VOLUME_LITERS}/{TIME_MINUTES}"
                                 use_entity = True
                               
-                            elif "_power" in attribute[OneSmartFieldName.NAME]:
+                            elif "_power" in attribute_name:
                                 entity[ATTR_UNIT_OF_MEASUREMENT] = POWER_WATT
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.POWER
-                                if "reactive" in attribute[OneSmartFieldName.NAME]:
+                                if "reactive" in attribute_name:
                                     entity[ATTR_UNIT_OF_MEASUREMENT] = None
                                     entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.POWER_FACTOR
 
                                 use_entity = True
 
-                            elif "current" in attribute[OneSmartFieldName.NAME]:
+                            elif "current" in attribute_name:
                                 entity[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_CURRENT_AMPERE
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.CURRENT
                                 use_entity = True
                             
-                            elif "voltage" in attribute[OneSmartFieldName.NAME]:
+                            elif "voltage" in attribute_name:
                                 entity[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_POTENTIAL_VOLT
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.VOLTAGE
                                 use_entity = True
                             
-                            elif "frequency" in attribute[OneSmartFieldName.NAME]:
+                            elif "frequency" in attribute_name:
                                 entity[ATTR_UNIT_OF_MEASUREMENT] = FREQUENCY_HERTZ
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.FREQUENCY
                                 use_entity = True
 
-                            elif "e_total" == attribute[OneSmartFieldName.NAME]:
+                            elif "e_total" == attribute_name:
                                 entity[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
                                 entity[ATTR_STATE_CLASS] = SensorStateClass.TOTAL
                                 use_entity = True
 
-                            elif "e_day" == attribute[OneSmartFieldName.NAME]:
+                            elif "e_day" == attribute_name:
                                 entity[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
                                 entity[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
                                 use_entity = True
                             
-                            elif "_energy_" in attribute[OneSmartFieldName.NAME] and device[OneSmartFieldName.TYPE] == "ENERGY_PROCON_ATW":
+                            elif "_energy_" in attribute_name and device[OneSmartFieldName.TYPE] == "ENERGY_PROCON_ATW":
                                 entity[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_WATT_HOUR
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
                                 entity[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
@@ -610,7 +613,7 @@ class OneSmartWrapper():
                             use_entity = True
 
                     elif attribute[OneSmartFieldName.ACCESS] == OneSmartAccessLevel.READWRITE:
-                        if "operating_mode" in attribute[OneSmartFieldName.NAME]:
+                        if "operating_mode" in attribute_name:
                             entity[CONF_PLATFORM] = Platform.SENSOR
                             use_entity = True
                         elif OneSmartFieldName.ENUM in attribute:
@@ -631,7 +634,27 @@ class OneSmartWrapper():
                                 }
             
                                 entity[STATE_ON] = "on"
+                                entity[STATE_OFF] = "off"
                                 use_entity = True
+                        elif "outputvalue" == attribute_name:
+                            if device[OneSmartFieldName.GROUP] == OneSmartGroupType.LIGHTS:
+                                if attribute[OneSmartFieldName.TYPE] == OneSmartDataType.NUMBER:
+                                    entity[CONF_PLATFORM] = Platform.LIGHT
+                                    entity[ATTR_SUPPORTED_COLOR_MODES] = ColorMode.BRIGHTNESS
+                                    entity[STATE_OFF] = 0
+                                    entity[SERVICE_TURN_ON] = {
+                                        "command":OneSmartCommand.APPARATUS, 
+                                        OneSmartFieldName.ACTION:OneSmartAction.SET, 
+                                        OneSmartFieldName.ID:device_id, 
+                                        OneSmartFieldName.ATTRIBUTES:{attribute_name:COMMAND_REPLACE_BRIGHTNESS}
+                                    }
+                                    entity[SERVICE_TURN_OFF] = {
+                                        "command":OneSmartCommand.APPARATUS, 
+                                        OneSmartFieldName.ACTION:OneSmartAction.SET, 
+                                        OneSmartFieldName.ID:device_id, 
+                                        OneSmartFieldName.ATTRIBUTES:{attribute_name:0}
+                                    }
+                                    use_entity = True
 
                     if use_entity == True:
                         # Append the entity
@@ -670,10 +693,12 @@ class OneSmartWrapper():
                         entity[ONESMART_CACHE] = (OneSmartCommand.PRESET,OneSmartAction.LIST)
                         entity[OneSmartUpdateTopic] = OneSmartUpdateTopic.POLL
 
-                        # if group_name == OneSmartGroupType.LIGHTS:
-                        #     entity[CONF_PLATFORM] = Platform.LIGHT      
-                        # else:
-                        entity[CONF_PLATFORM] = Platform.SWITCH
+                        if group_name == OneSmartGroupType.LIGHTS:
+                            entity[CONF_PLATFORM] = Platform.LIGHT
+                            entity[ATTR_SUPPORTED_COLOR_MODES] = ColorMode.ONOFF
+                            entity[STATE_OFF] = False
+                        else:
+                            entity[CONF_PLATFORM] = Platform.SWITCH
 
                         # Room preset
                         if area_id == 0:
