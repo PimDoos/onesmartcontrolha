@@ -30,59 +30,59 @@ async def shutdown():
 async def run():
 	await setup()
 
-	for command in [COMMAND_PRESET, COMMAND_PRESET_GROUP, COMMAND_MODULES, COMMAND_METER, COMMAND_ROOM]:
+	for command in [OneSmartCommand.PRESET, OneSmartCommand.PRESET_GROUP, OneSmartCommand.MODULES, OneSmartCommand.METER, OneSmartCommand.ROOM, OneSmartCommand.USER, OneSmartCommand.ROLE]:
 		print(f"=== Listing { command } ===")
-		result = await command_wait(command, action=ACTION_LIST)
+		result = await command_wait(command, action=OneSmartAction.LIST)
 		print(result)
 	
 	
-	for action_type in [ACTIONTYPE_SITE_PRESET, ACTIONTYPE_PRESET_GROUP]:
+	for action_type in [OneSmartActionType.SITE_PRESET, OneSmartActionType.PRESET_GROUP]:
 		print(f"=== Listing triggers for { action_type } ===")
-		result = await command_wait(COMMAND_TRIGGER, action=ACTION_GET, actiontype=action_type)
+		result = await command_wait(OneSmartCommand.TRIGGER, action=OneSmartAction.GET, actiontype=action_type)
 		print(result)
 
 
-	result = await command_wait(COMMAND_DEVICE, action=ACTION_LIST)
-	devices = result[RPC_RESULT][RPC_DEVICES]
+	result = await command_wait(OneSmartCommand.DEVICE, action=OneSmartAction.LIST)
+	devices = result[OneSmartFieldName.RESULT][OneSmartFieldName.DEVICES]
 	for device in devices:
-		device_name = device[RPC_NAME]
+		device_name = device[OneSmartFieldName.NAME]
 		print(f"=== { device_name } ===")
 		print(f"Device properties: { device }")
 		
-		device_id = device[RPC_ID]
+		device_id = device[OneSmartFieldName.ID]
 
-		result = await command_wait(COMMAND_APPARATUS, action=ACTION_LIST, id=device_id)
-		if not RPC_RESULT in result:
+		result = await command_wait(OneSmartCommand.APPARATUS, action=OneSmartAction.LIST, id=device_id)
+		if not OneSmartFieldName.RESULT in result:
 			logging.error("No command result (command timed out?)")
 			attributes = []
-		elif not RPC_ATTRIBUTES in result[RPC_RESULT]:
-			logging.error(f"No device attributes in command result: { result[RPC_RESULT] }")
+		elif not OneSmartFieldName.ATTRIBUTES in result[OneSmartFieldName.RESULT]:
+			logging.error(f"No device attributes in command result: { result[OneSmartFieldName.RESULT] }")
 			attributes = []
 		else:
-			attributes = result[RPC_RESULT][RPC_ATTRIBUTES]
+			attributes = result[OneSmartFieldName.RESULT][OneSmartFieldName.ATTRIBUTES]
 
 		print(f"Attributes: { len (attributes) }")
 		device_attributes = list()
-		device[RPC_ATTRIBUTES] = dict()
+		device[OneSmartFieldName.ATTRIBUTES] = dict()
 
 		async def fetch_attribute_values(device, device_id, device_attributes):
 			if not fetch_attributes:
 				return
-			await command_wait(COMMAND_PING)
+			await command_wait(OneSmartCommand.PING)
 			try:
 				print("Fetching attribute values...")
 				result = await command_wait(
-					COMMAND_APPARATUS, action=ACTION_GET, 
+					OneSmartCommand.APPARATUS, action=OneSmartAction.GET, 
 					id=device_id, attributes=device_attributes
 				)
-				device[RPC_ATTRIBUTES] = device[RPC_ATTRIBUTES] | result[RPC_RESULT][RPC_ATTRIBUTES]
+				device[OneSmartFieldName.ATTRIBUTES] = device[OneSmartFieldName.ATTRIBUTES] | result[OneSmartFieldName.RESULT][OneSmartFieldName.ATTRIBUTES]
 				device_attributes = list()
 			except Exception as e:
 				logging.error(f"Error fetching attribute values for { device_id }: { e }")
 
 		for attribute in attributes:
-			attribute_name = attribute[RPC_NAME]
-			if attribute[RPC_ACCESS] in [ACCESS_READ, ACCESS_READWRITE]:
+			attribute_name = attribute[OneSmartFieldName.NAME]
+			if attribute[OneSmartFieldName.ACCESS] in [OneSmartAccessLevel.READ, OneSmartAccessLevel.READWRITE]:
 				device_attributes.append(attribute_name)
 			
 			if len(device_attributes) >= MAX_APPARATUS_POLL:
@@ -92,9 +92,9 @@ async def run():
 			await fetch_attribute_values(device, device_id, device_attributes)
 
 		for attribute in attributes:
-			attribute_name = attribute[RPC_NAME]
-			if attribute_name in device[RPC_ATTRIBUTES]:
-				attribute_value = device[RPC_ATTRIBUTES][attribute_name]
+			attribute_name = attribute[OneSmartFieldName.NAME]
+			if attribute_name in device[OneSmartFieldName.ATTRIBUTES]:
+				attribute_value = device[OneSmartFieldName.ATTRIBUTES][attribute_name]
 				print(attribute_name, attribute, attribute_value)
 			else:
 				print(attribute_name, attribute)
@@ -102,9 +102,9 @@ async def run():
 		print("")
 
 	print("===EVENTS===")
-	#topics = ['ENERGY', 'DEVICE', 'MESSAGE', 'METER', 'PRESET', 'PRESETGROUP', 'ROLE', 'ROOM', 'TRIGGER', 'SITE', 'SITEPRESET', 'UPGRADE', 'USER']
-	topics = ['DEVICE', 'MESSAGE', 'METER', 'PRESET', 'PRESETGROUP', 'ROLE', 'ROOM', 'TRIGGER', 'SITE', 'SITEPRESET', 'UPGRADE', 'USER']
-	await command_wait(COMMAND_EVENTS, action=ACTION_SUBSCRIBE, topics=topics)
+	topics = ['ENERGY', 'DEVICE', 'MESSAGE', 'METER', 'PRESET', 'PRESETGROUP', 'ROLE', 'ROOM', 'TRIGGER', 'SITE', 'SITEPRESET', 'UPGRADE', 'USER']
+	#topics = ['DEVICE', 'MESSAGE', 'METER', 'PRESET', 'PRESETGROUP', 'ROLE', 'ROOM', 'TRIGGER', 'SITE', 'SITEPRESET', 'UPGRADE', 'USER']
+	await command_wait(OneSmartCommand.EVENTS, action=OneSmartAction.SUBSCRIBE, topics=topics)
 
 	last_ping = time.time()
 	while True:
@@ -114,7 +114,7 @@ async def run():
 			print(event)
 		
 		if time.time() > last_ping + PING_INTERVAL:
-			await gateway.send_cmd(COMMAND_PING)
+			await gateway.send_cmd(OneSmartCommand.PING)
 		await asyncio.sleep(1)
 
 	await shutdown()

@@ -40,7 +40,7 @@ class OneSmartSocket:
 
     async def authenticate(self, username, password):
         password_hash = sha1(password.encode()).hexdigest()
-        return await self.send_cmd(command=COMMAND_AUTHENTICATE, username=username, password=password_hash)
+        return await self.send_cmd(command=OneSmartCommand.AUTHENTICATE, username=username, password=password_hash)
 
     async def close(self):
         try:
@@ -64,7 +64,7 @@ class OneSmartSocket:
     async def send_cmd(self, command, **kwargs):
         self._transaction_count += 1
         transaction_id = self._transaction_count
-        rpc_message = { RPC_COMMAND:command, RPC_TRANSACTION:transaction_id } | kwargs
+        rpc_message = { OneSmartFieldName.COMMAND:command, OneSmartFieldName.TRANSACTION:transaction_id } | kwargs
         rpc_data = json.dumps(rpc_message) + "\r\n"
         self._writer.write(rpc_data.encode())
         await self._writer.drain()
@@ -73,7 +73,7 @@ class OneSmartSocket:
         return transaction_id
     
     async def ping(self):
-        return await self.send_cmd(command=COMMAND_PING)
+        return await self.send_cmd(command=OneSmartCommand.PING)
 
     """Fetch outstanding responses and cache them by transaction ID"""
     async def get_responses(self):
@@ -88,14 +88,15 @@ class OneSmartSocket:
                 break
             elif len(read_bytes) == SOCKET_BUFFER_SIZE:
                 data += read_bytes
-                _LOGGER.debug(f"Packet is { len(data) } bytes, waiting for more")
+                #_LOGGER.debug(f"Packet is { len(data) } bytes, waiting for more")
                 continue
             elif read_bytes[-2:] != b"\r\n":
                 data += read_bytes
-                _LOGGER.debug(f"Packet does not end with linefeed, waiting for more data")
+                #_LOGGER.debug(f"Packet does not end with linefeed, waiting for more data")
             else:
                 data += read_bytes
                 done_reading = True
+                
         messages = data.split(b"\r\n")
         
         for message_bytes in messages:
@@ -104,9 +105,9 @@ class OneSmartSocket:
                 try:
                     reply_data = json.loads(reply)
                     if not reply_data == None:
-                        if RPC_TRANSACTION in reply_data:
+                        if OneSmartFieldName.TRANSACTION in reply_data:
                             # Received message is a transaction response
-                            transaction_id = reply_data[RPC_TRANSACTION]
+                            transaction_id = reply_data[OneSmartFieldName.TRANSACTION]
                             self._response_cache[transaction_id] = reply_data
                             
                         else:

@@ -1,48 +1,4 @@
-# Access
-ACCESS_READ = "READ"
-ACCESS_READWRITE = "READWRITE"
-ACCESS_WRITE = "WRITE"
-
-# Actions
-ACTION_ADD = "add"
-ACTION_CHECK = "check"
-ACTION_DELETE = "delete"
-ACTION_GET = "get"
-ACTION_LIST = "list"
-ACTION_PERFORM = "perform"
-ACTION_SUBSCRIBE = "subscribe"
-ACTION_TOTAL = "total"
-ACTION_UPDATE = "update"
-
-# Action Types (Triggers)
-ACTIONTYPE_SITE_PRESET = "SITEPRESET"
-ACTIONTYPE_PRESET_GROUP = "PRESETGROUP"
-
-SETUP_SUCCESS = 0
-SETUP_FAIL_NETWORK = 1
-SETUP_FAIL_AUTH = 2
-SETUP_FAIL_CACHE = 3
-
-# Commands
-COMMAND_APPARATUS = "apparatus"
-COMMAND_AUTHENTICATE = "authenticate"
-COMMAND_DEVICE = "device"
-COMMAND_ENERGY = "energy"
-COMMAND_EVENTS = "events"
-COMMAND_GETTOKEN = "gettoken"
-COMMAND_LOGBOOK = "logbook"
-COMMAND_METER = "meter"
-COMMAND_MODULES = "modules"
-COMMAND_PING = "ping"
-COMMAND_PRESET = "preset"
-COMMAND_PRESET_GROUP = "presetgroup"
-COMMAND_ROLE = "role"
-COMMAND_ROOM = "room"
-COMMAND_SITE = "site"
-COMMAND_USER = "user"
-COMMAND_UPGRADE = "upgrade"
-COMMAND_SITEPRESET = "sitepreset"
-COMMAND_TRIGGER = "trigger"
+from enum import Enum, IntEnum
 
 DEVICE_MANUFACTURER = "One Smart Control"
 INTEGRATION_TITLE = "One Smart Control"
@@ -50,74 +6,150 @@ INTEGRATION_TITLE = "One Smart Control"
 DOMAIN = "onesmartcontrol"
 ONESMART_RUNNER = "runner"
 ONESMART_WRAPPER = "onesmartwrapper"
-ONESMART_UPDATE_PUSH = f"{DOMAIN}_push"
-ONESMART_UPDATE_POLL = f"{DOMAIN}_poll"
-ONESMART_UPDATE_DEFINITIONS = f"{DOMAIN}_definitions"
-ONESMART_UPDATE_APPARATUS = f"{DOMAIN}_apparatus"
 
-EVENT_ENERGY_CONSUMPTION = "energy_consumption"
-EVENT_SITE_UPDATE = "site_update"
+class OneSmartUpdateTopic(str, Enum):
+    PUSH = f"{DOMAIN}_push"
+    POLL = f"{DOMAIN}_poll"
+    DEFINITIONS = f"{DOMAIN}_definitions"
+    APPARATUS = f"{DOMAIN}_apparatus"
+    PRESET = f"{DOMAIN}_preset"
 
-SCAN_INTERVAL_DEFINITIONS = 1800
-SCAN_INTERVAL_CACHE = 300
+ONESMART_CACHE = "cache"
+ONESMART_KEY = "key"
 
-INTERVAL_TRACKER_DEFINITIONS = "track_interval_definitions"
-INTERVAL_TRACKER_POLL = "track_interval_poll"
+class OneSmartAccessLevel(str, Enum):
+    READ = "READ"
+    READWRITE = "READWRITE"
+    WRITE = "WRITE"
 
-RPC_ACCESS = "access"
-RPC_ACTION = "action"
-RPC_ATTRIBUTES = "attributes"
-RPC_COMMAND = "cmd"
-RPC_DATA = "data"
-RPC_DEVICES = "devices"
-RPC_ENUM = "enum"
-RPC_ERROR = "error"
-RPC_EVENT = "event"
-RPC_RESULT = "result"
-RPC_TRANSACTION = "transaction"
-RPC_TYPE = "type"
-RPC_VALUES = "values"
-RPC_VALUE = "value"
-RPC_VISIBLE = "visible"
-RPC_NAME = "name"
-RPC_METERS = "meters"
-RPC_ID = "id"
+class OneSmartAction(str, Enum):
+    ADD = "add"
+    CHECK = "check"
+    DELETE = "delete"
+    GET = "get"
+    LIST = "list"
+    PERFORM = "perform"
+    SET = "set"
+    SUBSCRIBE = "subscribe"
+    TOTAL = "total"
+    UPDATE = "update"
 
+class OneSmartActionType(str, Enum):
+    SITE_PRESET = "SITEPRESET"
+    PRESET_GROUP = "PRESETGROUP"
 
-SITE_NODEID = "nodeID"
-SITE_MAC = "mac"
-SITE_VERSION = "version"
+class OneSmartSetupStatus(IntEnum):
+    SUCCESS = 0
+    FAIL_NETWORK = 1
+    FAIL_AUTH = 2
+    FAIL_CACHE = 3
 
-TOPIC_AUTHENTICATION = "AUTHENTICATION"
-TOPIC_ENERGY = "ENERGY"
-TOPIC_DEVICE = "DEVICE"
-TOPIC_MESSAGE = "MESSAGE"
-TOPIC_METER = "METER"
-TOPIC_PRESET = "PRESET"
-TOPIC_PRESETGROUP = "PRESETGROUP"
-TOPIC_ROLE = "ROLE"
-TOPIC_ROOM = "ROOM"
-TOPIC_TRIGGER = "TRIGGER"
-TOPIC_SITE = "SITE"
-TOPIC_SITEPRESET = "SITEPRESET"
-TOPIC_UPGRADE = "UPGRADE"
-TOPIC_USER = "USER"
+class OneSmartCommand(str, Enum):
+    APPARATUS = "apparatus"
+    AUTHENTICATE = "authenticate"
+    DEVICE = "device"
+    ENERGY = "energy"
+    EVENTS = "events"
+    GETTOKEN = "gettoken"
+    LOGBOOK = "logbook"
+    METER = "meter"
+    MODULES = "modules"
+    PING = "ping"
+    PRESET = "preset"
+    PRESET_GROUP = "presetgroup"
+    ROLE = "role"
+    ROOM = "room"
+    SITE = "site"
+    USER = "user"
+    UPGRADE = "upgrade"
+    SITEPRESET = "sitepreset"
+    TRIGGER = "trigger"
 
+class OneSmartEventType(str, Enum):
+    DEVICE_DATA = "device_data"
+    DEVICE_INPUT = "device_input"
+    DEVICE_STATUS = "device_status"
 
-TYPE_ARRAY = "ARRAY"
-TYPE_NUMBER = "NUMBER"
-TYPE_OBJECT = "OBJECT"
-TYPE_REAL = "REAL"
-TYPE_STRING = "STRING"
+    ENERGY_CONSUMPTION = "energy_consumption"
 
+    PRESET_PERFORM = "preset_perform"
+    PRESET_STOP = "preset_stop"
+    PRESET_DELETE = "preset_delete"
+    
+    ROOM_CREATE = "room_create"
+    ROOM_UPDATE = "room_update"
+    ROOM_DELETE = "room_delete"
 
-ALL_TOPICS = [
-    TOPIC_AUTHENTICATION, TOPIC_DEVICE, TOPIC_ENERGY, 
-    TOPIC_MESSAGE, TOPIC_METER, TOPIC_PRESET, 
-    TOPIC_PRESETGROUP, TOPIC_ROLE, TOPIC_ROOM, 
-    TOPIC_TRIGGER, TOPIC_SITE, TOPIC_SITEPRESET,
-    TOPIC_UPGRADE, TOPIC_USER
-]
+    SITE_UPDATE = "site_update"
+
+    TRIGGER_CREATE = "trigger_create"
+    TRIGGER_PERFORM = "trigger_perform"
+    TRIGGER_DELETE = "trigger_delete"
+
+class OneSmartPresetType(str, Enum):
+    ROOMON = "ROOM{}"
+    ROOMOFF = "ROOMOFF"
+    AREAON = "AREA{}ON"
+    AREAOFF = "AREA{}OFF"
+
+class OneSmartFieldName(str, Enum):
+    ACCESS = "access"
+    ACTION = "action"
+    ACTIVE = "active"
+    ATTRIBUTES = "attributes"
+    COMMAND = "cmd"
+    DATA = "data"
+    DEVICES = "devices"
+    ENUM = "enum"
+    ERROR = "error"
+    EVENT = "event"
+    GROUP = "group"
+    MAC = "mac"
+    NODEID = "nodeID"
+    PRESETS = "presets"
+    RESULT = "result"
+    ROOMS = "rooms"
+    TRANSACTION = "transaction"
+    TYPE = "type"
+    VALUES = "values"
+    VALUE = "value"
+    VERSION = "version"
+    VISIBLE = "visible"
+    NAME = "name"
+    METERS = "meters"
+    ID = "id"
+
+class OneSmartTopic(str, Enum):
+    AUTHENTICATION = "AUTHENTICATION"
+    ENERGY = "ENERGY"
+    DEVICE = "DEVICE"
+    MESSAGE = "MESSAGE"
+    METER = "METER"
+    PRESET = "PRESET"
+    PRESETGROUP = "PRESETGROUP"
+    ROLE = "ROLE"
+    ROOM = "ROOM"
+    TRIGGER = "TRIGGER"
+    SITE = "SITE"
+    SITEPRESET = "SITEPRESET"
+    UPGRADE = "UPGRADE"
+    USER = "USER"
+
+class OneSmartDataType(str, Enum):
+    ARRAY = "ARRAY"
+    NUMBER = "NUMBER"
+    OBJECT = "OBJECT"
+    REAL = "REAL"
+    STRING = "STRING"
+
+class OneSmartGroupType(str, Enum):
+    ACCESS = "ACCESS"
+    AUDIO = "AUDIO"
+    BLINDS = "BLINDS"
+    CLIMATE = "CLIMATE"
+    LIGHTS = "LIGHTS"
+    SECURITY = "SECURITY"
+    VIDEO = "VIDEO"
 
 # Config
 SOCKET_BUFFER_SIZE = 1024
@@ -128,10 +160,14 @@ SOCKET_COMMAND_TIMEOUT = 60
 SOCKET_COMMAND_DELAY = 5
 SOCKET_RECONNECT_DELAY = 60
 SOCKET_RECONNECT_RETRIES = 5
-
-
 SOCKET_POLL = "poll"
 SOCKET_PUSH = "push"
+
+SCAN_INTERVAL_DEFINITIONS = 1800
+SCAN_INTERVAL_CACHE = 300
+
+INTERVAL_TRACKER_DEFINITIONS = "track_interval_definitions"
+INTERVAL_TRACKER_POLL = "track_interval_poll"
 
 MAX_TRANSACTION_ID = 65535
 BIT_LENGTH_DOUBLE = 64
