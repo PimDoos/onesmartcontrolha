@@ -1,15 +1,16 @@
 """Read One Smart Control power and energy data"""
 from __future__ import annotations
+import json
 from homeassistant.config_entries import ConfigEntry
 
 
 from homeassistant.const import (
     ATTR_IDENTIFIERS, ATTR_DEFAULT_NAME, ATTR_SW_VERSION, ATTR_VIA_DEVICE,
     ATTR_DEVICE_CLASS, ATTR_NAME, Platform, CONF_DEVICE_ID,
-    SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_ON
+    SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_OFF
 )
-from homeassistant.components.switch import (
-    SwitchDeviceClass, SwitchEntity, SwitchEntityDescription
+from homeassistant.components.light import (
+    LightEntity, LightEntityDescription, ColorMode, ATTR_BRIGHTNESS, ATTR_SUPPORTED_COLOR_MODES
 )
 from homeassistant.core import HomeAssistant
 
@@ -19,17 +20,17 @@ from .onesmartwrapper import OneSmartWrapper
 from .const import * 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    """Set up the One Smart Control switches"""
+    """Set up the One Smart Control lights"""
 
     wrapper: OneSmartWrapper = hass.data[DOMAIN][entry.entry_id][ONESMART_WRAPPER]
 
     entities = []
     
-    wrapper_entities = wrapper.get_platform_entities(Platform.SWITCH)
+    wrapper_entities = wrapper.get_platform_entities(Platform.LIGHT)
 
     for wrapper_entity in wrapper_entities:
         optional_attributes = [
-            CONF_DEVICE_ID, ATTR_DEVICE_CLASS, SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_ON
+            CONF_DEVICE_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_OFF, ATTR_SUPPORTED_COLOR_MODES
         ]
 
         for optional_attribute in optional_attributes:
@@ -37,7 +38,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
                 wrapper_entity[optional_attribute] = None
 
         entities.append(
-            OneSmartSwitch(
+            OneSmartLight(
                 hass,
                 entry,
                 wrapper,
@@ -46,17 +47,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
                 key=wrapper_entity[ONESMART_KEY],
                 name=wrapper_entity[ATTR_NAME],
                 device_id=wrapper_entity[CONF_DEVICE_ID],
-                device_class=wrapper_entity[ATTR_DEVICE_CLASS],
+                color_modes=wrapper_entity[ATTR_SUPPORTED_COLOR_MODES],
                 command_on=wrapper_entity[SERVICE_TURN_ON],
                 command_off=wrapper_entity[SERVICE_TURN_OFF],
-                state_on=wrapper_entity[STATE_ON]
+                state_off=wrapper_entity[STATE_OFF]
             )
         )
 
 
     async_add_entities(entities)
     
-class OneSmartSwitch(OneSmartEntity, SwitchEntity):
+class OneSmartLight(OneSmartEntity, LightEntity):
     def __init__(
         self,
         hass,
@@ -68,11 +69,11 @@ class OneSmartSwitch(OneSmartEntity, SwitchEntity):
         name,
         command_on: dict,
         command_off: dict,
-        state_on = True,
+        color_modes: ColorMode = ColorMode.ONOFF,
+        state_off = True,
         device_id=None,
         suffix=None,
-        icon=None,
-        device_class: SwitchDeviceClass = None
+        icon=None
     ):
         super().__init__(hass, config_entry, wrapper, update_topic)
         self.wrapper = wrapper
@@ -87,18 +88,27 @@ class OneSmartSwitch(OneSmartEntity, SwitchEntity):
         self._suffix = suffix
         self._source = source
         self._icon = icon
-        self._device_class = device_class
+        self._supported_color_modes = color_modes
+        if self._supported_color_modes == None:
+            self._supported_color_modes = ColorMode.ONOFF
 
         self._command_on = command_on
         self._command_off = command_off
 
-        self._state_on = state_on
-        if self._state_on == None:
-            self._state_on = True
+        self._state_off = state_off
+        if self._state_off == None:
+            self._state_off = True
 
     @property
     def is_on(self):
-        return self.get_cache_value(self._key) == self._state_on
+        return self.get_cache_value(self._key) != self._state_off
+    
+    @property
+    def brightness(self):
+        if self._supported_color_modes == ColorMode.BRIGHTNESS:
+            return self.get_cache_value(self._key)
+        else:
+            return None
 
     @property
     def available(self) -> bool:
@@ -110,6 +120,15 @@ class OneSmartSwitch(OneSmartEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs):
         await self.wrapper.command(SOCKET_PUSH, **self._command_on)
+        if self._supported_color_modes == ColorMode.BRIGHTNESS:
+            if ATTR_BRIGHTNESS in kwargs:
+                brightness = kwargs[ATTR_BRIGHTNESS]
+            else:
+                brightness = 255
+            command_on = json.loads(json.dumps(self._command_on).replace(f"{COMMAND_REPLACE_BRIGHTNESS}",f"{brightness}"))
+            await self.wrapper.command(SOCKET_PUSH, command_on)
+        else:
+            await self.wrapper.command(SOCKET_PUSH, **self._command_on)
         self.wrapper.set_update_flag(self._source)
 
     async def async_turn_off(self, **kwargs):
