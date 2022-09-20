@@ -126,20 +126,11 @@ class OneSmartSensor(OneSmartEntity, SensorEntity):
         device_class: SensorDeviceClass = None,
         state_class: SensorStateClass = None,
     ):
-        super().__init__(hass, config_entry, wrapper, update_topic)
+        super().__init__(hass, config_entry, wrapper, update_topic, source, device_id, name, suffix, icon)
         self.wrapper = wrapper
         self._key = key
-        if device_id != None:
-            self._device_id = device_id
-            devices = self.cache[(OneSmartCommand.DEVICE,OneSmartAction.LIST)]
-            self._device = devices[device_id]
-        else:
-            self._device_id = self.cache[(OneSmartCommand.SITE,OneSmartAction.GET)][OneSmartFieldName.NODEID]
-        self._name = name
-        self._suffix = suffix
-        self._source = source
+        
         self._unit = unit
-        self._icon = icon
         self._device_class = device_class
         self._state_class = state_class
 
@@ -148,10 +139,7 @@ class OneSmartSensor(OneSmartEntity, SensorEntity):
         return self.get_cache_value(self._key)
 
     @property
-    def available(self) -> bool:
-        if not self._source in self.cache:
-            return False
-        
+    def available(self) -> bool:      
         value = self.get_cache_value(self._key)
         return value is not None
 
@@ -160,48 +148,10 @@ class OneSmartSensor(OneSmartEntity, SensorEntity):
         return self._unit
 
     @property
-    def icon(self):
-        return self._icon
-
-    @property
     def device_class(self):
         return self._device_class
 
     @property
     def state_class(self):
         return self._state_class
-
-    @property
-    def name(self):
-        if self._suffix != None:
-            return f"{self._name} {self._suffix.title()}"
-        else:
-            return self._name
-
-    @property
-    def unique_id(self):
-        if self._suffix != None:
-            return f"{DOMAIN}-{self._device_id}-{self._key}-{self._suffix}"
-        else:
-            return f"{DOMAIN}-{self._device_id}-{self._key}"
-
-    @property
-    def device_info(self):
-        site = self.cache[(OneSmartCommand.SITE,OneSmartAction.GET)]
-        if self._device_id == site[OneSmartFieldName.NODEID]:
-            identifiers = {(DOMAIN, site[OneSmartFieldName.MAC]), (DOMAIN, self._device_id)}
-            device_name = site[OneSmartFieldName.NAME]
-        else:
-            identifiers = {(DOMAIN, self._device_id)}
-            device_name = self._device[OneSmartFieldName.NAME]
-
-        
-        return {
-            ATTR_IDENTIFIERS: identifiers,
-            ATTR_DEFAULT_NAME: site[OneSmartFieldName.NAME],
-            ATTR_NAME: device_name,
-            "default_manufacturer": DEVICE_MANUFACTURER,
-            ATTR_SW_VERSION: site[OneSmartFieldName.VERSION],
-            ATTR_VIA_DEVICE: (DOMAIN, site[OneSmartFieldName.NODEID])
-        }
 

@@ -1,4 +1,8 @@
 from enum import Enum, IntEnum
+from homeassistant.components.climate import (
+    ATTR_HVAC_MODES, ATTR_HVAC_ACTION, HVACMode, HVACAction
+)
+
 
 DEVICE_MANUFACTURER = "One Smart Control"
 INTEGRATION_TITLE = "One Smart Control"
@@ -16,6 +20,10 @@ class OneSmartUpdateTopic(str, Enum):
 
 ONESMART_CACHE = "cache"
 ONESMART_KEY = "key"
+ONESMART_KEY_ACTION = "key_action"
+ONESMART_KEY_TEMPERATURE = "key_temperature"
+ONESMART_KEY_TARGET_TEMPERATURE = "key_target_temperature"
+ONESMART_KEY_MODE = "key_mode"
 
 class OneSmartAccessLevel(str, Enum):
     READ = "READ"
@@ -175,25 +183,36 @@ MAX_APPARATUS_POLL = 4
 PING_INTERVAL = 30
 DEFAULT_PORT = 9010
 
-COMMAND_REPLACE_BRIGHTNESS = 4294967296
+COMMAND_REPLACE_VALUE = 4294967296
 
 
-CLIMATE_ENTITY_ATTRIBUTES = [
-    [
-        "operating_mode",
-        "system_onoff",
-        "room_temperature_zone1",
-        "hc_thermostat_target_temperature_zone1"
-    ]
+CLIMATE_ENTITY_DEFINITIONS = [
+    {
+        ONESMART_KEY_ACTION:"operating_mode",
+        ONESMART_KEY_TEMPERATURE:"room_temperature_zone1",
+        ONESMART_KEY_TARGET_TEMPERATURE:"hc_thermostat_target_temperature_zone1",
+        ONESMART_KEY_MODE:"system_onoff",
+        ATTR_HVAC_MODES:{
+            HVACMode.OFF:"off",
+            HVACMode.AUTO:"on"
+        },
+        ATTR_HVAC_ACTION:{
+            'stop':HVACAction.OFF, 
+            'hot_water':HVACAction.OFF,
+            'heating':HVACAction.HEATING, 
+            'cooling':HVACAction.COOLING, 
+            'freeze_stat':HVACAction.OFF,
+            'legionella':HVACAction.OFF
+        }
+    }
 
 ]
-WATER_HEATER_ENTITY_ATTRIBUTES = [
-    [
-        "operating_mode_dhw",
-        "dhw_temperature_drop",
-        "water_tank_setpoint",
-        "water_tank_temperature",
-        "dhw_on_prohibit"
-    ]
+WATER_HEATER_ENTITY_DEFINITIONS = [
+    {
+        ONESMART_KEY_ACTION:"operating_mode_dhw",
+        ONESMART_KEY_TARGET_TEMPERATURE:"water_tank_setpoint",
+        ONESMART_KEY_TEMPERATURE:"water_tank_temperature",
+        ONESMART_KEY_MODE:"dhw_on_prohibit"
+    }
 ]
 

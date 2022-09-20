@@ -1,15 +1,18 @@
 """Read One Smart Control power and energy data"""
 from __future__ import annotations
+import json
 from homeassistant.config_entries import ConfigEntry
 
 
 from homeassistant.const import (
-    CONF_PLATFORM, Platform,
-    ATTR_IDENTIFIERS, ATTR_DEFAULT_NAME, ATTR_SW_VERSION, 
-	ATTR_VIA_DEVICE, ATTR_NAME, 
+    ATTR_IDENTIFIERS, ATTR_DEFAULT_NAME, ATTR_SW_VERSION, ATTR_VIA_DEVICE,
+    ATTR_DEVICE_CLASS, ATTR_NAME, Platform, CONF_DEVICE_ID,
+    SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_ON, ATTR_TEMPERATURE, TEMP_CELSIUS,
+    
 )
 from homeassistant.components.climate import (
-    ClimateEntity, ClimateEntityFeature
+    ClimateEntity, ClimateEntityDescription, HVACAction, HVACMode, ClimateEntityFeature,
+    ATTR_HVAC_ACTION, ATTR_HVAC_MODES
 )
 from homeassistant.core import HomeAssistant
 
@@ -19,52 +22,41 @@ from .onesmartwrapper import OneSmartWrapper
 from .const import * 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    """Set up the One Smart Control climate entities"""
+    """Set up the One Smart Control climates"""
 
     wrapper: OneSmartWrapper = hass.data[DOMAIN][entry.entry_id][ONESMART_WRAPPER]
 
-    cache = wrapper.get_cache()
-
     entities = []
+    
+    wrapper_entities = wrapper.get_platform_entities(Platform.CLIMATE)
 
-    # Device sensors
-    devices_attributes = wrapper.get_apparatus_attributes()
-    devices = cache[(OneSmartCommand.DEVICE,OneSmartAction.LIST)]
+    for wrapper_entity in wrapper_entities:
+        optional_attributes = [
+            CONF_DEVICE_ID, ATTR_DEVICE_CLASS, SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_ON
+        ]
 
-    for device_id in devices_attributes:
-        device = devices[device_id]
-        device_name = device[OneSmartFieldName.NAME]
-        attributes = devices_attributes[device_id]
+        for optional_attribute in optional_attributes:
+            if not optional_attribute in wrapper_entity:
+                wrapper_entity[optional_attribute] = None
 
-		# If device has all attributes, create entity
-
-        for attribute_name in attributes:
-            attribute = attributes[attribute_name]
-
-            if(attribute[CONF_PLATFORM] == Platform.CLIMATE):
-                required_attributes = [
-                    
-                ]
-
-                for required_attribute in required_attributes:
-                    if not required_attribute in attribute:
-                        attribute[required_attribute] = None
-
-                entities.append(
-                    OneSmartClimate(
-                        hass,
-                        entry,
-                        wrapper,
-                        ONESMART_UPDATE_APPARATUS,
-                        f"{device_id}.{attribute_name}",
-                        f"{device_name} {attribute_name.replace('_',' ').title()}",
-                        None,
-                        (OneSmartCommand.APPARATUS,OneSmartAction.GET),
-                        device_id,
-                        
-                    )
-                )
-
+        entities.append(
+            OneSmartClimate(
+                hass,
+                entry,
+                wrapper,
+                update_topic=wrapper_entity[OneSmartUpdateTopic],
+                source=wrapper_entity[ONESMART_CACHE],
+                key_action=wrapper_entity[ONESMART_KEY_ACTION],
+                key_mode=wrapper_entity[ONESMART_KEY_MODE],
+                key_temperature=wrapper_entity[ONESMART_KEY_TEMPERATURE],
+                key_target_temperature=wrapper_entity[ONESMART_KEY_TARGET_TEMPERATURE],
+                name=wrapper_entity[ATTR_NAME],
+                device_id=wrapper_entity[CONF_DEVICE_ID],
+                hvac_commands = wrapper_entity[ATTR_HVAC_MODES],
+                hvac_actions = wrapper_entity[ATTR_HVAC_ACTION],
+                features = ClimateEntityFeature.TARGET_TEMPERATURE
+            )
+        )
 
 
     async_add_entities(entities)
@@ -72,75 +64,101 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 class OneSmartClimate(OneSmartEntity, ClimateEntity):
     def __init__(
         self,
-        hass: HomeAssistant,
-        config_entry: ConfigEntry,
+        hass,
+        config_entry,
         wrapper: OneSmartWrapper,
-        update_topic: str,
-        key: str,
-        name: str,
-        suffix: str,
-        source: str,
-        device_id: str,
-        attributes: dict()
+        update_topic,
+        source,
+        key_action,
+        key_temperature,
+        key_target_temperature,
+        key_mode,
+        name,
+        hvac_commands: dict,
+        hvac_actions: dict,
+        features,
+        device_id=None,
+        suffix=None,
+        icon=None
     ):
-        super().__init__(hass, config_entry, wrapper, update_topic)
+        super().__init__(hass, config_entry, wrapper, update_topic, source, device_id, name, suffix, icon)
         self.wrapper = wrapper
-        self._key = key
-        if device_id != None:
-            self._device_id = device_id
-            devices = self.cache[(OneSmartCommand.DEVICE,OneSmartAction.LIST)]
-            self._device = devices[device_id]
-        else:
-            self._device_id = self.cache[(OneSmartCommand.SITE,OneSmartAction.GET)][OneSmartFieldName.NODEID]
-        self._name = name
-        self._suffix = suffix
-        self._source = source
-        self._attributes = attributes
 
-    @property
-    def state(self):
-        return self.get_cache_value(self._key)
+        self._key_action = key_action
+        self._key_mode = key_mode
+        self._key_temperature = key_temperature
+        self._key_target_temperature = key_target_temperature
+
+        self._hvac_commands = hvac_commands
+        self._hvac_modes = {value: key for key,value in hvac_commands.items()}
+        self._hvac_actions = hvac_actions
+        self._features = features
+
 
     @property
     def available(self) -> bool:
-        if not self._source in self.cache:
-            return False
-        
-        value = self.get_cache_value(self._key)
+        value = self.get_cache_value(self._key_action)
         return value is not None
 
     @property
-    def name(self):
-        if self._suffix != None:
-            return f"{self._name} {self._suffix.title()}"
+    def temperature_unit(self):
+        return TEMP_CELSIUS
+
+    async def async_set_hvac_mode(self, hvac_mode):
+        command_mode = {
+            "command":self._source[0], OneSmartFieldName.ACTION:OneSmartAction.SET, OneSmartFieldName.ID:self._device_id, 
+            OneSmartFieldName.ATTRIBUTES:{self._key_mode:self._hvac_commands[hvac_mode]}
+        }
+        await self.wrapper.command(SOCKET_PUSH, command_mode)
+        self.wrapper.set_update_flag(self._source)
+
+    async def async_set_temperature(self, **kwargs):
+        if ATTR_TEMPERATURE in kwargs:
+            temperature = kwargs[ATTR_TEMPERATURE]
+            command_temperature = {
+                "command":self._source[0], OneSmartFieldName.ACTION:OneSmartAction.SET, OneSmartFieldName.ID:self._device_id, 
+                OneSmartFieldName.ATTRIBUTES:{self._key_target_temperature:temperature}
+            }
+            await self.wrapper.command(SOCKET_PUSH, **command_temperature)
+        self.wrapper.set_update_flag(self._source)
+
+    @property
+    def hvac_action(self) -> HVACAction: 
+        value = self.get_cache_value(self._key_action)
+
+        if value in self._hvac_actions:
+            return self._hvac_actions[value]
         else:
-            return self._name
-	
+            return HVACAction.OFF
+
+    @property
+    def hvac_modes(self):
+        return list(self._hvac_commands.keys())
+    
+    @property
+    def hvac_mode(self):
+        value = self.get_cache_value(self._key_mode)
+        if value in self._hvac_modes:
+            return self._hvac_modes[value]
+        else:
+            return HVACMode.OFF
+
+
+    @property
+    def supported_features(self):
+        return self._features
+
+    @property
+    def current_temperature(self) -> float:
+        return self.get_cache_value(self._key_temperature)
+    
+    @property
+    def target_temperature(self) -> float:
+        return self.get_cache_value(self._key_target_temperature)
 
     @property
     def unique_id(self):
         if self._suffix != None:
-            return f"{DOMAIN}-{self._device_id}-{self._key}-{self._suffix}"
+            return f"{DOMAIN}-{self._device_id}-{self._key_mode}-{self._suffix}"
         else:
-            return f"{DOMAIN}-{self._device_id}-{self._key}"
-
-    @property
-    def device_info(self):
-        site = self.cache[(OneSmartCommand.SITE,OneSmartAction.GET)]
-        if self._device_id == site[OneSmartFieldName.NODEID]:
-            identifiers = {(DOMAIN, site[OneSmartFieldName.MAC]), (DOMAIN, self._device_id)}
-            device_name = site[OneSmartFieldName.NAME]
-        else:
-            identifiers = {(DOMAIN, self._device_id)}
-            device_name = self._device[OneSmartFieldName.NAME]
-
-        
-        return {
-            ATTR_IDENTIFIERS: identifiers,
-            ATTR_DEFAULT_NAME: site[OneSmartFieldName.NAME],
-            ATTR_NAME: device_name,
-            "default_manufacturer": DEVICE_MANUFACTURER,
-            ATTR_SW_VERSION: site[OneSmartFieldName.VERSION],
-            ATTR_VIA_DEVICE: (DOMAIN, site[OneSmartFieldName.NODEID])
-        }
-
+            return f"{DOMAIN}-{self._device_id}-{self._key_mode}"
