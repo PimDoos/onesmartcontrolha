@@ -105,19 +105,23 @@ class OneSmartClimate(OneSmartEntity, ClimateEntity):
         return TEMP_CELSIUS
 
     async def async_set_hvac_mode(self, hvac_mode):
-        command_mode = {
-            "command":self._source[0], OneSmartFieldName.ACTION:OneSmartAction.SET, OneSmartFieldName.ID:self._device_id, 
-            OneSmartFieldName.ATTRIBUTES:{self._key_mode:self._hvac_commands[hvac_mode]}
-        }
-        await self.wrapper.command(SOCKET_PUSH, command_mode)
-        self.wrapper.set_update_flag(self._source)
+        mode_value = self._hvac_commands[hvac_mode]
+        mode_key = self._key_mode.split(".")[-1]
+        if mode_value != None:
+            command_mode = {
+                "command":self._source[0], OneSmartFieldName.ACTION:OneSmartAction.SET, OneSmartFieldName.ID:self._device_id, 
+                OneSmartFieldName.ATTRIBUTES:{mode_key:mode_value}
+            }
+            await self.wrapper.command(SOCKET_PUSH, command_mode)
+            self.wrapper.set_update_flag(self._source)
 
     async def async_set_temperature(self, **kwargs):
         if ATTR_TEMPERATURE in kwargs:
             temperature = kwargs[ATTR_TEMPERATURE]
+            temperature_key = self._key_target_temperature.split(".")[-1]
             command_temperature = {
                 "command":self._source[0], OneSmartFieldName.ACTION:OneSmartAction.SET, OneSmartFieldName.ID:self._device_id, 
-                OneSmartFieldName.ATTRIBUTES:{self._key_target_temperature:temperature}
+                OneSmartFieldName.ATTRIBUTES:{temperature_key:temperature}
             }
             await self.wrapper.command(SOCKET_PUSH, **command_temperature)
         self.wrapper.set_update_flag(self._source)
@@ -137,11 +141,14 @@ class OneSmartClimate(OneSmartEntity, ClimateEntity):
     
     @property
     def hvac_mode(self):
-        value = self.get_cache_value(self._key_mode)
-        if value in self._hvac_modes:
-            return self._hvac_modes[value]
+        if self._key_mode != None:
+            value = self.get_cache_value(self._key_mode)
+            if value in self._hvac_modes:
+                return self._hvac_modes[value]
+            else:
+                return HVACMode.OFF
         else:
-            return HVACMode.OFF
+            return list(self._hvac_commands.keys())[0]
 
 
     @property

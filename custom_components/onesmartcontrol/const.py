@@ -116,6 +116,7 @@ class OneSmartFieldName(str, Enum):
     NODEID = "nodeID"
     PRESETS = "presets"
     RESULT = "result"
+    ROOM = "room"
     ROOMS = "rooms"
     TRANSACTION = "transaction"
     TYPE = "type"
@@ -204,7 +205,20 @@ CLIMATE_ENTITY_DEFINITIONS = [
             'freeze_stat':HVACAction.OFF,
             'legionella':HVACAction.OFF
         }
-    }
+    },
+    {
+        ONESMART_KEY_ACTION:"bypass_percentage",
+        ONESMART_KEY_TEMPERATURE:"outlet_air_temperature",
+        ONESMART_KEY_TARGET_TEMPERATURE:"comfort_temperature",
+        ONESMART_KEY_MODE:None,
+        ATTR_HVAC_MODES:{
+            HVACMode.FAN_ONLY:None,
+        },
+        ATTR_HVAC_ACTION:{
+            0:HVACAction.FAN, 
+            100:HVACAction.COOLING,
+        }
+    },
 
 ]
 WATER_HEATER_ENTITY_DEFINITIONS = [

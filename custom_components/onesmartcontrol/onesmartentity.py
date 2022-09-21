@@ -1,7 +1,7 @@
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity
-from homeassistant.const import ATTR_IDENTIFIERS, ATTR_DEFAULT_NAME, ATTR_SW_VERSION, ATTR_VIA_DEVICE, ATTR_NAME
+from homeassistant.const import ATTR_IDENTIFIERS, ATTR_DEFAULT_NAME, ATTR_SW_VERSION, ATTR_VIA_DEVICE, ATTR_NAME, ATTR_MODEL, ATTR_SUGGESTED_AREA
 
 from .onesmartwrapper import OneSmartWrapper
 from .const import *
@@ -26,7 +26,9 @@ class OneSmartEntity(Entity):
         if device_id != None:
             self._device_id = device_id
             devices = wrapper.get_cache((OneSmartCommand.DEVICE,OneSmartAction.LIST))
+            rooms = wrapper.get_cache((OneSmartCommand.ROOM,OneSmartAction.LIST))
             self._device = devices[device_id]
+            self._room = rooms[self._device[OneSmartFieldName.ROOM]]
         else:
             
             self._device_id = self._site[OneSmartFieldName.NODEID]
@@ -83,14 +85,20 @@ class OneSmartEntity(Entity):
         if self._device_id == self._site[OneSmartFieldName.NODEID]:
             identifiers = {(DOMAIN, self._site[OneSmartFieldName.MAC]), (DOMAIN, self._device_id)}
             device_name = self._site[OneSmartFieldName.NAME]
+            model = None
+            room_name = None
         else:
             identifiers = {(DOMAIN, self._device_id)}
             device_name = self._device[OneSmartFieldName.NAME]
+            model = self._device[OneSmartFieldName.TYPE]
+            room_name = self._room[OneSmartFieldName.NAME]
 
         return {
             ATTR_IDENTIFIERS: identifiers,
             ATTR_DEFAULT_NAME: self._site[OneSmartFieldName.NAME],
             ATTR_NAME: device_name,
+            ATTR_MODEL: model,
+            ATTR_SUGGESTED_AREA: room_name,
             "default_manufacturer": DEVICE_MANUFACTURER,
             ATTR_SW_VERSION: self._site[OneSmartFieldName.VERSION],
             ATTR_VIA_DEVICE: (DOMAIN, self._site[OneSmartFieldName.NODEID])
