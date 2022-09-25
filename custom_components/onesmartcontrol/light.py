@@ -110,14 +110,10 @@ class OneSmartLight(OneSmartEntity, LightEntity):
         return value is not None
 
     async def async_turn_on(self, **kwargs):
-        await self.wrapper.command(SOCKET_PUSH, **self._command_on)
         if ColorMode.BRIGHTNESS in self._supported_color_modes:
-            if ATTR_BRIGHTNESS in kwargs:
-                brightness = kwargs[ATTR_BRIGHTNESS]
-            else:
-                brightness = 255
+            brightness = kwargs.get(ATTR_BRIGHTNESS, 255)
             command_on = json.loads(json.dumps(self._command_on).replace(f"{COMMAND_REPLACE_VALUE}",f"{brightness}"))
-            await self.wrapper.command(SOCKET_PUSH, command_on)
+            await self.wrapper.command(SOCKET_PUSH, **command_on)
         else:
             await self.wrapper.command(SOCKET_PUSH, **self._command_on)
         self.wrapper.set_update_flag(self._source)
