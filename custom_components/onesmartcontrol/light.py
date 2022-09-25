@@ -1,12 +1,11 @@
-"""Read One Smart Control power and energy data"""
+"""Read and control One Smart Control lights"""
 from __future__ import annotations
 import json
 from homeassistant.config_entries import ConfigEntry
 
 
 from homeassistant.const import (
-    ATTR_IDENTIFIERS, ATTR_DEFAULT_NAME, ATTR_SW_VERSION, ATTR_VIA_DEVICE,
-    ATTR_DEVICE_CLASS, ATTR_NAME, Platform, CONF_DEVICE_ID,
+    ATTR_NAME, Platform, CONF_DEVICE_ID,
     SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_OFF
 )
 from homeassistant.components.light import (
