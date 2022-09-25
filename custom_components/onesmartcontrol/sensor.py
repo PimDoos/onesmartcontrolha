@@ -1,4 +1,4 @@
-"""Read One Smart Control power and energy data"""
+"""Read One Smart Control device data"""
 from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 
@@ -6,9 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     POWER_WATT, 
     ENERGY_WATT_HOUR,
-    ATTR_IDENTIFIERS, ATTR_DEFAULT_NAME, ATTR_SW_VERSION, ATTR_VIA_DEVICE,
     ATTR_UNIT_OF_MEASUREMENT, ATTR_DEVICE_CLASS, ATTR_NAME, CONF_PLATFORM, Platform, CONF_DEVICE_ID,
-    CONF_ATTRIBUTE
 )
 from homeassistant.components.sensor import (
     SensorDeviceClass, SensorStateClass,

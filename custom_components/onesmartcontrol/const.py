@@ -1,8 +1,4 @@
 from enum import Enum, IntEnum
-from homeassistant.components.climate import (
-    ATTR_HVAC_MODES, ATTR_HVAC_ACTION, HVACMode, HVACAction
-)
-
 
 DEVICE_MANUFACTURER = "One Smart Control"
 INTEGRATION_TITLE = "One Smart Control"
@@ -185,48 +181,3 @@ PING_INTERVAL = 30
 DEFAULT_PORT = 9010
 
 COMMAND_REPLACE_VALUE = 4294967296
-
-
-CLIMATE_ENTITY_DEFINITIONS = [
-    {
-        ONESMART_KEY_ACTION:"operating_mode",
-        ONESMART_KEY_TEMPERATURE:"room_temperature_zone1",
-        ONESMART_KEY_TARGET_TEMPERATURE:"hc_thermostat_target_temperature_zone1",
-        ONESMART_KEY_MODE:"system_onoff",
-        ATTR_HVAC_MODES:{
-            HVACMode.OFF:"off",
-            HVACMode.AUTO:"on"
-        },
-        ATTR_HVAC_ACTION:{
-            'stop':HVACAction.OFF, 
-            'hot_water':HVACAction.OFF,
-            'heating':HVACAction.HEATING, 
-            'cooling':HVACAction.COOLING, 
-            'freeze_stat':HVACAction.OFF,
-            'legionella':HVACAction.OFF
-        }
-    },
-    {
-        ONESMART_KEY_ACTION:"bypass_percentage",
-        ONESMART_KEY_TEMPERATURE:"outlet_air_temperature",
-        ONESMART_KEY_TARGET_TEMPERATURE:"comfort_temperature",
-        ONESMART_KEY_MODE:None,
-        ATTR_HVAC_MODES:{
-            HVACMode.FAN_ONLY:None,
-        },
-        ATTR_HVAC_ACTION:{
-            0:HVACAction.FAN, 
-            100:HVACAction.COOLING,
-        }
-    },
-
-]
-WATER_HEATER_ENTITY_DEFINITIONS = [
-    {
-        ONESMART_KEY_ACTION:"operating_mode_dhw",
-        ONESMART_KEY_TARGET_TEMPERATURE:"water_tank_setpoint",
-        ONESMART_KEY_TEMPERATURE:"water_tank_temperature",
-        ONESMART_KEY_MODE:"dhw_on_prohibit"
-    }
-]
-

@@ -35,12 +35,10 @@ from homeassistant.components.sensor import (
 from homeassistant.components.light import (
     ColorMode, ATTR_SUPPORTED_COLOR_MODES
 )
-from homeassistant.components.climate import (
-    HVACMode, HVACAction, ATTR_HVAC_MODES, ATTR_HVAC_ACTION
-)
 from time import time
 
 from .const import *
+from .entitytemplates import ENTITY_TEMPLATES
 from .onesmartsocket import OneSmartSocket
 
 class OneSmartWrapper():
@@ -529,28 +527,30 @@ class OneSmartWrapper():
                 self.device_apparatus_attributes[device_id] = dict()
                 
                 device_attribute_names = [attribute[OneSmartFieldName.NAME] for attribute in attributes]
-                for climate_entity_definition in CLIMATE_ENTITY_DEFINITIONS:
-                    climate_entity_keys = [value for value in list(climate_entity_definition.values()) if isinstance(value, str)]
-                    if all(attribute_name in device_attribute_names for attribute_name in climate_entity_keys):
-                        entity = dict()
-                        entity[CONF_PLATFORM] = Platform.CLIMATE
-                        entity[ONESMART_CACHE] = (OneSmartCommand.APPARATUS,OneSmartAction.GET)
-                        entity[ATTR_NAME] = device_name
-                        entity[CONF_DEVICE_ID] = device_id
-                        entity[OneSmartUpdateTopic] = OneSmartUpdateTopic.APPARATUS
-                        entity = entity | climate_entity_definition
 
-                        for climate_entity_definition_key in climate_entity_definition:
-                            key = climate_entity_definition[climate_entity_definition_key]
-                            if isinstance(key, str):
-                                entity[climate_entity_definition_key] = f"{device_id}.{key}"
+                for platform_name in ENTITY_TEMPLATES:
+                    for entity_template in ENTITY_TEMPLATES[platform_name]:
+                        entity_template_keys = [value for value in list(entity_template.values()) if isinstance(value, str)]
+                        if all(attribute_name in device_attribute_names for attribute_name in entity_template_keys):
+                            entity = dict()
+                            entity[CONF_PLATFORM] = platform_name
+                            entity[ONESMART_CACHE] = (OneSmartCommand.APPARATUS,OneSmartAction.GET)
+                            entity[ATTR_NAME] = device_name
+                            entity[CONF_DEVICE_ID] = device_id
+                            entity[OneSmartUpdateTopic] = OneSmartUpdateTopic.APPARATUS
+                            entity = entity | entity_template
 
-                        # Append the entity
-                        self.entities[entity[CONF_PLATFORM]].append(entity)
+                            for entity_template_key in entity_template:
+                                key = entity_template[entity_template_key]
+                                if isinstance(key, str):
+                                    entity[entity_template_key] = f"{device_id}.{key}"
 
-                        # Mark the attribute for polling
-                        for attribute_name in climate_entity_keys:
-                            self.device_apparatus_attributes[device_id][attribute_name] = attribute_name
+                            # Append the entity
+                            self.entities[entity[CONF_PLATFORM]].append(entity)
+
+                            # Mark the attribute for polling
+                            for attribute_name in entity_template_keys:
+                                self.device_apparatus_attributes[device_id][attribute_name] = attribute_name
                         
                     
 
@@ -667,15 +667,26 @@ class OneSmartWrapper():
                             if device[OneSmartFieldName.GROUP] == OneSmartGroupType.LIGHTS:
                                 if attribute[OneSmartFieldName.TYPE] == OneSmartDataType.NUMBER:
                                     entity[CONF_PLATFORM] = Platform.LIGHT
-                                    entity[ATTR_SUPPORTED_COLOR_MODES] = [ColorMode.BRIGHTNESS]
+                                    if "DIP" in device[OneSmartFieldName.TYPE]:
+                                        entity[ATTR_SUPPORTED_COLOR_MODES] = [ColorMode.BRIGHTNESS]
+                                        entity[SERVICE_TURN_ON] = {
+                                            "command":OneSmartCommand.APPARATUS, 
+                                            OneSmartFieldName.ACTION:OneSmartAction.SET, 
+                                            OneSmartFieldName.ID:device_id, 
+                                            OneSmartFieldName.ATTRIBUTES:{attribute_name:COMMAND_REPLACE_VALUE}
+                                        }
+                                    else:
+                                        entity[ATTR_SUPPORTED_COLOR_MODES] = [ColorMode.ONOFF]
+                                        entity[SERVICE_TURN_ON] = {
+                                            "command":OneSmartCommand.APPARATUS, 
+                                            OneSmartFieldName.ACTION:OneSmartAction.SET, 
+                                            OneSmartFieldName.ID:device_id, 
+                                            OneSmartFieldName.ATTRIBUTES:{attribute_name:255}
+                                        }
+
                                     entity[STATE_OFF] = 0
                                     entity[ATTR_NAME] = device_name
-                                    entity[SERVICE_TURN_ON] = {
-                                        "command":OneSmartCommand.APPARATUS, 
-                                        OneSmartFieldName.ACTION:OneSmartAction.SET, 
-                                        OneSmartFieldName.ID:device_id, 
-                                        OneSmartFieldName.ATTRIBUTES:{attribute_name:COMMAND_REPLACE_VALUE}
-                                    }
+                                    
                                     entity[SERVICE_TURN_OFF] = {
                                         "command":OneSmartCommand.APPARATUS, 
                                         OneSmartFieldName.ACTION:OneSmartAction.SET, 
