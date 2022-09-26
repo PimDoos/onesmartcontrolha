@@ -667,7 +667,7 @@ class OneSmartWrapper():
                             if device[OneSmartFieldName.GROUP] == OneSmartGroupType.LIGHTS:
                                 if attribute[OneSmartFieldName.TYPE] == OneSmartDataType.NUMBER:
                                     entity[CONF_PLATFORM] = Platform.LIGHT
-                                    if "DIP" in device[OneSmartFieldName.TYPE]:
+                                    if "LID" in device[OneSmartFieldName.TYPE]:
                                         entity[ATTR_SUPPORTED_COLOR_MODES] = [ColorMode.BRIGHTNESS]
                                         entity[SERVICE_TURN_ON] = {
                                             "command":OneSmartCommand.APPARATUS, 
@@ -736,7 +736,7 @@ class OneSmartWrapper():
 
                         if group_name == OneSmartGroupType.LIGHTS:
                             entity[CONF_PLATFORM] = Platform.LIGHT
-                            entity[ATTR_SUPPORTED_COLOR_MODES] = ColorMode.ONOFF
+                            entity[ATTR_SUPPORTED_COLOR_MODES] = [ColorMode.ONOFF]
                             entity[STATE_OFF] = False
                         else:
                             entity[CONF_PLATFORM] = Platform.SWITCH
