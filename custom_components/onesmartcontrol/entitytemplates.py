@@ -1,5 +1,5 @@
 from homeassistant.const import (
-	Platform
+    Platform
 )
 from homeassistant.components.climate import (
     ATTR_HVAC_MODES, ATTR_HVAC_ACTION, HVACMode, HVACAction
@@ -15,9 +15,13 @@ ENTITY_TEMPLATES = dict()
 ENTITY_TEMPLATES[Platform.SENSOR] = [
 
 ]
+ENTITY_TEMPLATES[Platform.SELECT] = [
+    
+]
 
 ENTITY_TEMPLATES[Platform.CLIMATE] = [
     {
+        ONESMART_CACHE: (OneSmartCommand.APPARATUS, OneSmartAction.GET),
         ONESMART_KEY_ACTION:"operating_mode",
         ONESMART_KEY_TEMPERATURE:"room_temperature_zone1",
         ONESMART_KEY_TARGET_TEMPERATURE:"hc_thermostat_target_temperature_zone1",
@@ -36,6 +40,7 @@ ENTITY_TEMPLATES[Platform.CLIMATE] = [
         }
     },
     {
+        ONESMART_CACHE: (OneSmartCommand.APPARATUS, OneSmartAction.GET),
         ONESMART_KEY_ACTION:"bypass_percentage",
         ONESMART_KEY_TEMPERATURE:"outlet_air_temperature",
         ONESMART_KEY_TARGET_TEMPERATURE:"comfort_temperature",
@@ -52,6 +57,7 @@ ENTITY_TEMPLATES[Platform.CLIMATE] = [
 ]
 ENTITY_TEMPLATES[Platform.WATER_HEATER] = [
     {
+        ONESMART_CACHE: (OneSmartCommand.APPARATUS, OneSmartAction.GET),
         ONESMART_KEY_TARGET_TEMPERATURE:"water_tank_setpoint",
         ONESMART_KEY_TEMPERATURE:"water_tank_temperature",
         ONESMART_KEY_MODE:"operating_mode_dhw",

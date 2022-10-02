@@ -23,9 +23,8 @@ from homeassistant.const import (
     CONF_ATTRIBUTE,
     SERVICE_TURN_ON, SERVICE_TURN_OFF,
     CONF_DEVICE_ID, ATTR_NAME,
-    STATE_ON, STATE_OFF
-    
-    
+    STATE_ON, STATE_OFF,
+
 )
 from homeassistant.components.sensor import (
     SensorDeviceClass, 
@@ -35,6 +34,10 @@ from homeassistant.components.sensor import (
 from homeassistant.components.light import (
     ColorMode, ATTR_SUPPORTED_COLOR_MODES
 )
+from homeassistant.components.select import (
+    ATTR_OPTIONS, SERVICE_SELECT_OPTION
+)
+
 from time import time
 
 from .const import *
@@ -276,6 +279,7 @@ class OneSmartWrapper():
                         elif event[OneSmartFieldName.EVENT] == OneSmartEventType.PRESET_PERFORM:
                             preset_id = event[OneSmartFieldName.DATA][OneSmartFieldName.ID]
                             self.cache[(OneSmartCommand.PRESET,OneSmartAction.LIST)][preset_id][OneSmartFieldName.ACTIVE] = True
+                            self.set_update_flag((OneSmartCommand.PRESET,OneSmartAction.LIST))
                             async_dispatcher_send(self.hass, OneSmartUpdateTopic.POLL)
 
                     async_dispatcher_send(self.hass, OneSmartUpdateTopic.PUSH)
@@ -727,54 +731,29 @@ class OneSmartWrapper():
                 for group_name in room_presets:
                     group_presets = room_presets[group_name]
 
-                    for area_id in range(0,8):
-                        entity = dict()
-                        use_entity = False
+                    entity = dict()
+                    entity[ONESMART_CACHE] = (OneSmartCommand.PRESET,OneSmartAction.LIST)
+                    entity[OneSmartUpdateTopic] = OneSmartUpdateTopic.POLL
+                    entity[CONF_PLATFORM] = Platform.SELECT
+                    entity[ATTR_OPTIONS] = dict()
+                    entity[SERVICE_SELECT_OPTION] = dict()
+                    entity[ATTR_NAME] = f"{room_name} {group_name.title()} Preset"
+                    entity[ONESMART_KEY] = f"{room_id}.{group_name}"
 
-                        entity[ONESMART_CACHE] = (OneSmartCommand.PRESET,OneSmartAction.LIST)
-                        entity[OneSmartUpdateTopic] = OneSmartUpdateTopic.POLL
+                    for preset_type in group_presets:
+                        preset = group_presets[preset_type]
+                        preset_name = preset[OneSmartFieldName.NAME]
+                        preset_id = preset[OneSmartFieldName.ID]
+                        entity[ATTR_OPTIONS][f"{preset_id}.{OneSmartFieldName.ACTIVE}"] = preset_name
+                        entity[SERVICE_SELECT_OPTION][preset_name] = {
+                            "command":OneSmartCommand.PRESET,
+                            OneSmartFieldName.ACTION:OneSmartAction.PERFORM,
+                            OneSmartFieldName.ID:preset_id
+                        }
 
-                        if group_name == OneSmartGroupType.LIGHTS:
-                            entity[CONF_PLATFORM] = Platform.LIGHT
-                            entity[ATTR_SUPPORTED_COLOR_MODES] = [ColorMode.ONOFF]
-                            entity[STATE_OFF] = False
-                        else:
-                            entity[CONF_PLATFORM] = Platform.SWITCH
-
-                        # Room preset
-                        if area_id == 0:
-                            preset_on_type = OneSmartPresetType.ROOMON.format(1)
-                            preset_off_type = OneSmartPresetType.ROOMOFF
-
-                        # Area presets
-                        else:
-                            preset_on_type = OneSmartPresetType.AREAON.format(area_id)
-                            preset_off_type = OneSmartPresetType.AREAOFF.format(area_id)
-
-                        if preset_on_type in group_presets and preset_off_type in group_presets:
-                            preset_on = group_presets[preset_on_type]
-                            preset_off = group_presets[preset_off_type]
-
-                            preset_on_name = preset_on[OneSmartFieldName.NAME]
-                            preset_on_id = preset_on[OneSmartFieldName.ID]
-
-                            preset_off_id = preset_off[OneSmartFieldName.ID]
-
-                            if area_id == 0:
-                                entity[ATTR_NAME] = f"{room_name.title()} {group_name.title()}"
-                            else:
-                                entity[ATTR_NAME] = f"{room_name.title()} {group_name.title()} {preset_on_name.title()}"
-
-                            entity[SERVICE_TURN_ON] = {
-                                "command":OneSmartCommand.PRESET, OneSmartFieldName.ACTION:OneSmartAction.PERFORM, OneSmartFieldName.ID:preset_on_id
-                            }
-                            entity[SERVICE_TURN_OFF] = {
-                                "command":OneSmartCommand.PRESET, OneSmartFieldName.ACTION:OneSmartAction.PERFORM, OneSmartFieldName.ID:preset_off_id
-                            }
-                            entity[ONESMART_KEY] = f"{preset_on_id}.{OneSmartFieldName.ACTIVE}"
-
-                            # Append the entity
-                            self.entities[entity[CONF_PLATFORM]].append(entity)
+                    if len(group_presets) >= 2:
+                        # Append the entity
+                        self.entities[entity[CONF_PLATFORM]].append(entity)
 
             except Exception as e:
                 _LOGGER.error(f"Error while discovering entities for room { room[OneSmartFieldName.NAME] }: { e }")
