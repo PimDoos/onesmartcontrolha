@@ -313,7 +313,7 @@ class OneSmartWrapper():
         return await socket.send_cmd(command, **kwargs)
 
     """Send command to the socket and return the transaction data"""
-    async def command_wait(self, socket_name, command: OneSmartCommand, **kwargs):
+    async def command_wait(self, socket_name, command: OneSmartCommand, **kwargs) -> dict:
         transaction_id = await self.command(socket_name, command, **kwargs)
 
         # Wait for transaction to return
@@ -672,7 +672,19 @@ class OneSmartWrapper():
                                 if attribute[OneSmartFieldName.TYPE] == OneSmartDataType.NUMBER:
                                     entity[CONF_PLATFORM] = Platform.LIGHT
                                     if "LID" in device[OneSmartFieldName.TYPE]:
-                                        entity[ATTR_SUPPORTED_COLOR_MODES] = [ColorMode.BRIGHTNESS]
+                                        outputmode_response = await self.command_wait(SOCKET_POLL, 
+                                            command=OneSmartCommand.APPARATUS,
+                                            action=OneSmartAction.GET,
+                                            id=device_id,
+                                            attributes=[OneSmartFieldName.OUTPUT_MODE]
+                                        )
+                                        output_mode = outputmode_response.get(OneSmartFieldName.RESULT, dict()).get(OneSmartFieldName.ATTRIBUTES, dict()).get(OneSmartFieldName.OUTPUT_MODE, OneSmartOutputMode.OFF)
+                                        if output_mode == OneSmartOutputMode.DIMMER:
+                                            entity[ATTR_SUPPORTED_COLOR_MODES] = [ColorMode.BRIGHTNESS]
+                                        else:
+                                            entity[ATTR_SUPPORTED_COLOR_MODES] = [ColorMode.ONOFF]
+
+                                        
                                         entity[SERVICE_TURN_ON] = {
                                             "command":OneSmartCommand.APPARATUS, 
                                             OneSmartFieldName.ACTION:OneSmartAction.SET, 

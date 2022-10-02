@@ -110,6 +110,7 @@ class OneSmartFieldName(str, Enum):
     GROUP = "group"
     MAC = "mac"
     NODEID = "nodeID"
+    OUTPUT_MODE = "outputmode"
     PRESETS = "presets"
     RESULT = "result"
     ROOM = "room"
@@ -155,6 +156,12 @@ class OneSmartGroupType(str, Enum):
     LIGHTS = "LIGHTS"
     SECURITY = "SECURITY"
     VIDEO = "VIDEO"
+
+class OneSmartOutputMode(int, Enum):
+    OFF = 0
+    BINARY = 16
+    DIMMER = 22
+    RELAY = 35
 
 # Config
 SOCKET_BUFFER_SIZE = 1024
