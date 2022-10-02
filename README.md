@@ -33,3 +33,9 @@ Supported device sensors:
 - Percentages
 - Revolutions per minute (RPM)
 - Mitsubishi Heatpump (via Procon ATW): Operation mode, flow rate, various diagnostic sensors, energy consumption/production
+
+Supported control entities:
+- Climate (Mitsubishi Heatpump, Comfoair WTW)
+- Water Heater (Mitsubishi Heatpump)
+- Room presets
+- On/off switches
