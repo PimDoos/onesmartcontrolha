@@ -9,7 +9,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from .const import *
 from .onesmartwrapper import OneSmartWrapper
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.LIGHT, Platform.CLIMATE, Platform.WATER_HEATER]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.LIGHT, Platform.CLIMATE, Platform.WATER_HEATER, Platform.SELECT]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
