@@ -30,7 +30,6 @@ class OneSmartEntity(Entity):
             self._device = devices[device_id]
             self._room = rooms[self._device[OneSmartFieldName.ROOM]]
         else:
-            
             self._device_id = self._site[OneSmartFieldName.NODEID]
 
         self._cache = wrapper.get_cache(source)

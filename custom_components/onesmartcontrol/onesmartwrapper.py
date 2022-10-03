@@ -769,16 +769,7 @@ class OneSmartWrapper():
 
             except Exception as e:
                 _LOGGER.error(f"Error while discovering entities for room { room[OneSmartFieldName.NAME] }: { e }")
-            
-    # def get_apparatus_attributes(self, device_id = None):
-    #     if device_id != None:
-    #         if device_id in self.device_apparatus_attributes:
-    #             return self.device_apparatus_attributes[device_id]
-    #         else:
-    #             return None
-    #     else:
-    #         return self.device_apparatus_attributes
-    
+                
     def get_platform_entities(self, platform: Platform):
         if platform in self.entities:
             return self.entities[platform]
