@@ -39,3 +39,4 @@ Supported control entities:
 - Water Heater (Mitsubishi Heatpump)
 - Room presets
 - On/off switches
+- One Smart Control light modules
