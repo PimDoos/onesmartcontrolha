@@ -27,9 +27,9 @@ class OneSmartEntity(Entity):
             self._device_id = device_id
             devices = wrapper.get_cache((OneSmartCommand.DEVICE,OneSmartAction.LIST))
             rooms = wrapper.get_cache((OneSmartCommand.ROOM,OneSmartAction.LIST))
-            self._device = devices.get(device_id)
+            self._device: dict = devices.get(device_id)
             room_id = self._device.get(OneSmartFieldName.ROOM, None)
-            self._room = rooms.get(room_id, None)
+            self._room: dict = rooms.get(room_id, None)
         else:
             self._device_id = self._site.get(OneSmartFieldName.NODEID)
 
@@ -82,26 +82,26 @@ class OneSmartEntity(Entity):
     @property
     def device_info(self):
 
-        if self._device_id == self._site[OneSmartFieldName.NODEID]:
-            identifiers = {(DOMAIN, self._site[OneSmartFieldName.MAC]), (DOMAIN, self._device_id)}
-            device_name = self._site[OneSmartFieldName.NAME]
+        if self._device_id == self._site.get(OneSmartFieldName.NODEID):
+            identifiers = {(DOMAIN, self._site.get(OneSmartFieldName.MAC)), (DOMAIN, self._device_id)}
+            device_name = self._site.get(OneSmartFieldName.NAME, None)
             model = None
             room_name = None
         else:
             identifiers = {(DOMAIN, self._device_id)}
-            device_name = self._device[OneSmartFieldName.NAME]
-            model = self._device[OneSmartFieldName.TYPE]
-            room_name = self._room[OneSmartFieldName.NAME]
+            device_name = self._device.get(OneSmartFieldName.NAME, None)
+            model = self._device.get(OneSmartFieldName.TYPE, None)
+            room_name = self._room.get(OneSmartFieldName.NAME, None)
 
         return {
             ATTR_IDENTIFIERS: identifiers,
-            ATTR_DEFAULT_NAME: self._site[OneSmartFieldName.NAME],
+            ATTR_DEFAULT_NAME: self._site.get(OneSmartFieldName.NAME, DEVICE_MANUFACTURER),
             ATTR_NAME: device_name,
             ATTR_MODEL: model,
             ATTR_SUGGESTED_AREA: room_name,
             "default_manufacturer": DEVICE_MANUFACTURER,
-            ATTR_SW_VERSION: self._site[OneSmartFieldName.VERSION],
-            ATTR_VIA_DEVICE: (DOMAIN, self._site[OneSmartFieldName.NODEID])
+            ATTR_SW_VERSION: self._site.get(OneSmartFieldName.VERSION, None),
+            ATTR_VIA_DEVICE: (DOMAIN, self._site.get(OneSmartFieldName.NODEID, None))
         }
     @callback
     def update_from_latest_data(self):
