@@ -8,7 +8,8 @@ Read more about the protocol [here](https://github.com/PimDoos/onesmartcontrolha
 
 Setup via HACS
 -----
-Setup the integration via the config flow
+1. Install the repository via HACS
+2. Setup the integration via the config flow
 
 [![](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=onesmartcontrol)
 
