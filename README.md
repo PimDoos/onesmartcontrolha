@@ -1,5 +1,5 @@
 # One Smart Control integration
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 
 Home Assistant integration for One Smart Control server
 
@@ -8,8 +8,7 @@ Read more about the protocol [here](https://github.com/PimDoos/onesmartcontrolha
 
 Setup via HACS
 -----
-1. Add this repository to your custom repositories
-2. Setup the integration via the config flow 
+Setup the integration via the config flow
 
 [![](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=onesmartcontrol)
 
