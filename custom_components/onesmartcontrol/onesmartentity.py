@@ -27,10 +27,11 @@ class OneSmartEntity(Entity):
             self._device_id = device_id
             devices = wrapper.get_cache((OneSmartCommand.DEVICE,OneSmartAction.LIST))
             rooms = wrapper.get_cache((OneSmartCommand.ROOM,OneSmartAction.LIST))
-            self._device = devices[device_id]
-            self._room = rooms[self._device[OneSmartFieldName.ROOM]]
+            self._device = devices.get(device_id)
+            room_id = self._device.get(OneSmartFieldName.ROOM, None)
+            self._room = rooms.get(room_id, None)
         else:
-            self._device_id = self._site[OneSmartFieldName.NODEID]
+            self._device_id = self._site.get(OneSmartFieldName.NODEID)
 
         self._cache = wrapper.get_cache(source)
 
