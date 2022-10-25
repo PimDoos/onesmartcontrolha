@@ -85,7 +85,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.exception("Unexpected exception")
             errors["base"] = "unknown"
         else:
-            return self.async_create_entry(title=info["title"], data=user_input)
+            return await self.async_create_entry(title=info.get("title"), data=user_input)
 
         return self.async_show_form(
             step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
@@ -107,13 +107,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
         return await self.async_step_user()
 
-    async def async_create_entry(self, data: dict) -> dict:
+    async def async_create_entry(self, title: str, data: dict) -> dict:
         """Create an entry or update existing entry for reauth."""
         if self.reauth_entry:
             self.hass.config_entries.async_update_entry(self.reauth_entry, data=data)
             await self.hass.config_entries.async_reload(self.reauth_entry.entry_id)
             return self.async_abort(reason="reauth_successful")
-        return await super().async_create_entry(data)
+        return super().async_create_entry(title=title, data=data)
 
 class CannotConnect(HomeAssistantError):
     """Error to indicate we cannot connect."""
