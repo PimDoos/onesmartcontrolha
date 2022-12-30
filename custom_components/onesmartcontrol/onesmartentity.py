@@ -91,7 +91,10 @@ class OneSmartEntity(Entity):
             identifiers = {(DOMAIN, self._device_id)}
             device_name = self._device.get(OneSmartFieldName.NAME, None)
             model = self._device.get(OneSmartFieldName.TYPE, None)
-            room_name = self._room.get(OneSmartFieldName.NAME, None)
+            if self._room:
+                room_name = self._room.get(OneSmartFieldName.NAME, None)
+            else:
+                room_name = None
 
         return {
             ATTR_IDENTIFIERS: identifiers,
