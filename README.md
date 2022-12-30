@@ -1,5 +1,8 @@
 # One Smart Control integration
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
+[![Validate with hassfest](https://github.com/PimDoos/onesmartcontrolha/actions/workflows/hassfest.yaml/badge.svg)](https://github.com/PimDoos/onesmartcontrolha/actions/workflows/hassfest.yaml)
+[![HACS Action](https://github.com/PimDoos/onesmartcontrolha/actions/workflows/hacs.yaml/badge.svg)](https://github.com/PimDoos/onesmartcontrolha/actions/workflows/hacs.yaml)
+
 
 Home Assistant integration for One Smart Control server
 
