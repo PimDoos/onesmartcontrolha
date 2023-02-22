@@ -77,9 +77,13 @@ class OneSmartLight(OneSmartEntity, LightEntity):
         self.wrapper = wrapper
         self._key = key
         
-        self._supported_color_modes = color_modes
-        if self._supported_color_modes == None:
-            self._supported_color_modes = [ColorMode.ONOFF]
+        
+        if color_modes == None:
+            self._attr_supported_color_modes = [ColorMode.ONOFF]
+        else:
+            self._attr_supported_color_modes = color_modes
+
+        
 
         self._command_on = command_on
         self._command_off = command_off
@@ -99,10 +103,6 @@ class OneSmartLight(OneSmartEntity, LightEntity):
         else:
             return None
     
-    @property
-    def supported_color_modes(self):
-        return self._supported_color_modes
-
     @property
     def available(self) -> bool:
         value = self.get_cache_value(self._key)
