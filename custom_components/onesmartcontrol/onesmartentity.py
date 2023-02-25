@@ -19,7 +19,7 @@ class OneSmartEntity(Entity):
 
         self._name = name
         self._suffix = suffix
-        self._icon = icon
+        self._attr_icon = icon
 
         self._site = wrapper.get_cache((OneSmartCommand.SITE,OneSmartAction.GET))
 
@@ -52,7 +52,6 @@ class OneSmartEntity(Entity):
     def available(self) -> bool:
         return self.wrapper.is_connected()
 
-
     @property
     def should_poll(self) -> bool:
         return False
@@ -67,10 +66,6 @@ class OneSmartEntity(Entity):
             return f"{self._name} {self._suffix.title()}"
         else:
             return self._name
-
-    @property
-    def icon(self):
-        return self._icon
 
     @property
     def unique_id(self):
