@@ -6,7 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     POWER_WATT, 
     ENERGY_WATT_HOUR,
-    ATTR_UNIT_OF_MEASUREMENT, ATTR_DEVICE_CLASS, ATTR_NAME, CONF_PLATFORM, Platform, CONF_DEVICE_ID,
+    ATTR_UNIT_OF_MEASUREMENT, ATTR_DEVICE_CLASS, ATTR_NAME, CONF_PLATFORM, Platform, CONF_DEVICE_ID
 )
 from homeassistant.components.sensor import (
     SensorDeviceClass, SensorStateClass,
@@ -123,33 +123,22 @@ class OneSmartSensor(OneSmartEntity, SensorEntity):
         icon = None,
         device_class: SensorDeviceClass = None,
         state_class: SensorStateClass = None,
+        precision: int = None
     ):
         super().__init__(hass, config_entry, wrapper, update_topic, source, device_id, name, suffix, icon)
         self.wrapper = wrapper
         self._key = key
         
-        self._unit = unit
-        self._device_class = device_class
-        self._state_class = state_class
+        self._attr_native_unit_of_measurement = unit
+        self._attr_device_class = device_class
+        self._attr_state_class = state_class
+        self._attr_native_precision = precision
 
     @property
-    def state(self):
+    def native_value(self):
         return self.get_cache_value(self._key)
 
     @property
     def available(self) -> bool:      
         value = self.get_cache_value(self._key)
         return value is not None
-
-    @property
-    def unit_of_measurement(self):
-        return self._unit
-
-    @property
-    def device_class(self):
-        return self._device_class
-
-    @property
-    def state_class(self):
-        return self._state_class
-

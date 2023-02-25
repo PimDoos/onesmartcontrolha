@@ -90,18 +90,18 @@ class OneSmartClimate(OneSmartEntity, ClimateEntity):
 
         self._hvac_commands = hvac_commands
         self._hvac_modes = {value: key for key,value in hvac_commands.items()}
+        self._attr_hvac_modes = list(self._hvac_commands.keys())
+
         self._hvac_actions = hvac_actions
-        self._features = features
+        self._attr_supported_features = features
+
+        self._attr_temperature_unit = TEMP_CELSIUS
 
 
     @property
     def available(self) -> bool:
         value = self.get_cache_value(self._key_action)
         return value is not None
-
-    @property
-    def temperature_unit(self):
-        return TEMP_CELSIUS
 
     async def async_set_hvac_mode(self, hvac_mode):
         mode_value = self._hvac_commands[hvac_mode]
@@ -134,10 +134,7 @@ class OneSmartClimate(OneSmartEntity, ClimateEntity):
         else:
             return HVACAction.OFF
 
-    @property
-    def hvac_modes(self):
-        return list(self._hvac_commands.keys())
-    
+
     @property
     def hvac_mode(self):
         if self._key_mode != None:
@@ -149,10 +146,6 @@ class OneSmartClimate(OneSmartEntity, ClimateEntity):
         else:
             return list(self._hvac_commands.keys())[0]
 
-
-    @property
-    def supported_features(self):
-        return self._features
 
     @property
     def current_temperature(self) -> float:
