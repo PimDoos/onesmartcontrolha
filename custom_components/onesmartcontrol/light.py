@@ -98,7 +98,7 @@ class OneSmartLight(OneSmartEntity, LightEntity):
     
     @property
     def brightness(self):
-        if ColorMode.BRIGHTNESS in self._supported_color_modes:
+        if ColorMode.BRIGHTNESS in self._attr_supported_color_modes:
             return self.get_cache_value(self._key)
         else:
             return None
@@ -109,7 +109,7 @@ class OneSmartLight(OneSmartEntity, LightEntity):
         return value is not None
 
     async def async_turn_on(self, **kwargs):
-        if ColorMode.BRIGHTNESS in self._supported_color_modes:
+        if ColorMode.BRIGHTNESS in self._attr_supported_color_modes:
             brightness = kwargs.get(ATTR_BRIGHTNESS, 255)
             command_on = json.loads(json.dumps(self._command_on).replace(f"{COMMAND_REPLACE_VALUE}",f"{brightness}"))
             await self.wrapper.command(SOCKET_PUSH, **command_on)
