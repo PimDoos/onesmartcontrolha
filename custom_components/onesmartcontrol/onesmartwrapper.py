@@ -514,14 +514,18 @@ class OneSmartWrapper():
             return self.cache[cache_name]
 
     async def discover_entities(self):
+        
         self.entities = dict()
         for platform_name in Platform:
             self.entities[platform_name] = list()
 
+        devices = self.cache[(OneSmartCommand.DEVICE,OneSmartAction.LIST)]
+        _LOGGER.info(f"Discovering entities for {len(devices)} devices")
+
         # Discover device attributes
-        for device_id in self.cache[(OneSmartCommand.DEVICE,OneSmartAction.LIST)]:
+        for device_id in devices:
             try:
-                device = self.cache[(OneSmartCommand.DEVICE,OneSmartAction.LIST)][device_id]
+                device = devices[device_id]
                 device_name = device[OneSmartFieldName.NAME]
                 if(device[OneSmartFieldName.VISIBLE] == False):
                     continue
@@ -717,9 +721,7 @@ class OneSmartWrapper():
 
                         # Mark the attribute for polling
                         self.device_apparatus_attributes[device_id][attribute[OneSmartFieldName.NAME]] = attribute
-
-                
-                
+  
             except Exception as e:
                 _LOGGER.error(f"Error while discovering entities for device { device[OneSmartFieldName.NAME] }: { e }")
 
@@ -769,6 +771,11 @@ class OneSmartWrapper():
 
             except Exception as e:
                 _LOGGER.error(f"Error while discovering entities for room { room[OneSmartFieldName.NAME] }: { e }")
+
+        for platform_name in Platform:
+            platform_entities = self.entities[platform_name]
+            if(len(platform_entities) > 0):
+                _LOGGER.info(f"Discovered { len(platform_entities) } entities for platform { platform_name }")
                 
     def get_platform_entities(self, platform: Platform):
         if platform in self.entities:
