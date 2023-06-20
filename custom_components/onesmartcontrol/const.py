@@ -112,6 +112,7 @@ class OneSmartFieldName(str, Enum):
     NODEID = "nodeID"
     OUTPUT_MODE = "outputmode"
     PRESETS = "presets"
+    PERFORM = "perform"
     RESULT = "result"
     ROOM = "room"
     ROOMS = "rooms"
@@ -162,6 +163,11 @@ class OneSmartOutputMode(int, Enum):
     BINARY = 16
     DIMMER = 22
     RELAY = 35
+
+class OneSmartDefaultSitePreset(str, Enum):
+    HOME = "HOME"
+    AWAY = "AWAY"
+    ASLEEP = "ASLEEP"
 
 # Config
 SOCKET_BUFFER_SIZE = 1024
