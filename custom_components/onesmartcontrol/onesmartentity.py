@@ -1,7 +1,8 @@
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import Entity
-from homeassistant.const import ATTR_IDENTIFIERS, ATTR_DEFAULT_NAME, ATTR_SW_VERSION, ATTR_VIA_DEVICE, ATTR_NAME, ATTR_MODEL, ATTR_SUGGESTED_AREA
+from homeassistant.helpers.entity import Entity, DeviceInfo
+from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceEntryType
+from homeassistant.const import ATTR_IDENTIFIERS, ATTR_DEFAULT_NAME, ATTR_SW_VERSION, ATTR_VIA_DEVICE, ATTR_NAME, ATTR_MODEL, ATTR_SUGGESTED_AREA, ATTR_MANUFACTURER
 
 from .onesmartwrapper import OneSmartWrapper
 from .const import *
@@ -18,6 +19,7 @@ class OneSmartEntity(Entity):
         self._source = source
 
         self._name = name
+        self._attr_has_entity_name = True
         self._suffix = suffix
         self._attr_icon = icon
 
@@ -30,8 +32,35 @@ class OneSmartEntity(Entity):
             self._device: dict = devices.get(device_id)
             room_id = self._device.get(OneSmartFieldName.ROOM, None)
             self._room: dict = rooms.get(room_id, None)
+
+            identifiers = {(DOMAIN, self._device_id)}
+            device_name = self._device.get(OneSmartFieldName.NAME, None)
+            model = self._device.get(OneSmartFieldName.TYPE, None)
+            if self._room:
+                room_name = self._room.get(OneSmartFieldName.NAME, None)
+            else:
+                room_name = None
         else:
             self._device_id = self._site.get(OneSmartFieldName.NODEID)
+            identifiers = {(DOMAIN, self._device_id),(DOMAIN, self._site.get(OneSmartFieldName.MAC))}
+            device_name = self._site.get(OneSmartFieldName.NAME, None)
+            model = DEVICE_MODEL
+            room_name = None
+
+        self._attr_device_info = DeviceInfo(
+            configuration_url="https://portal.onesmartcontrol.com",
+            connections = None,
+            entry_type = None,
+            hw_version = None,
+            identifiers = identifiers,
+            manufacturer = DEVICE_MANUFACTURER,
+            model = model,
+            name = device_name,
+            suggested_area = room_name,
+            sw_version = self._site.get(OneSmartFieldName.VERSION, None),
+            via_device=(DOMAIN, self._site.get(OneSmartFieldName.NODEID, None)),
+
+        )
 
         self._cache = wrapper.get_cache(source)
 
@@ -74,33 +103,6 @@ class OneSmartEntity(Entity):
         else:
             return f"{DOMAIN}-{self._device_id}-{self._key}"
 
-    @property
-    def device_info(self):
-
-        if self._device_id == self._site.get(OneSmartFieldName.NODEID):
-            identifiers = {(DOMAIN, self._site.get(OneSmartFieldName.MAC)), (DOMAIN, self._device_id)}
-            device_name = self._site.get(OneSmartFieldName.NAME, None)
-            model = None
-            room_name = None
-        else:
-            identifiers = {(DOMAIN, self._device_id)}
-            device_name = self._device.get(OneSmartFieldName.NAME, None)
-            model = self._device.get(OneSmartFieldName.TYPE, None)
-            if self._room:
-                room_name = self._room.get(OneSmartFieldName.NAME, None)
-            else:
-                room_name = None
-
-        return {
-            ATTR_IDENTIFIERS: identifiers,
-            ATTR_DEFAULT_NAME: self._site.get(OneSmartFieldName.NAME, DEVICE_MANUFACTURER),
-            ATTR_NAME: device_name,
-            ATTR_MODEL: model,
-            ATTR_SUGGESTED_AREA: room_name,
-            "default_manufacturer": DEVICE_MANUFACTURER,
-            ATTR_SW_VERSION: self._site.get(OneSmartFieldName.VERSION, None),
-            ATTR_VIA_DEVICE: (DOMAIN, self._site.get(OneSmartFieldName.NODEID, None))
-        }
     @callback
     def update_from_latest_data(self):
         self._cache = self.wrapper.get_cache(self._source)

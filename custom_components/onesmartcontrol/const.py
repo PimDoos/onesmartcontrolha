@@ -1,6 +1,7 @@
 from enum import Enum, IntEnum
 
 DEVICE_MANUFACTURER = "One Smart Control"
+DEVICE_MODEL = "OneConnect"
 INTEGRATION_TITLE = "One Smart Control"
 
 DOMAIN = "onesmartcontrol"
