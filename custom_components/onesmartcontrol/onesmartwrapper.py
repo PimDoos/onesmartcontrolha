@@ -270,9 +270,15 @@ class OneSmartWrapper():
                     # Handle events
                     for event in events:
                         if event[OneSmartFieldName.EVENT] == OneSmartEventType.ENERGY_CONSUMPTION and len(self.cache[(OneSmartCommand.METER,OneSmartAction.LIST)]) > 0:
+                            # Set all meters to 0 in case no value is received
+                            for meter in self.cache[(OneSmartCommand.METER,OneSmartAction.LIST)]:
+                                self.cache[OneSmartEventType.ENERGY_CONSUMPTION][meter[OneSmartFieldName.ID]] = 0
+
+                            # Update meters from energy consumption event
                             for reading in event[OneSmartFieldName.DATA][OneSmartFieldName.VALUES]:
                                 meter_value = reading["value"]
-                                self.cache[OneSmartEventType.ENERGY_CONSUMPTION][reading["id"]] = meter_value
+                                self.cache[OneSmartEventType.ENERGY_CONSUMPTION][reading[OneSmartFieldName.ID]] = meter_value
+
                         elif event[OneSmartFieldName.EVENT] == OneSmartEventType.SITE_UPDATE:
                             self.cache[OneSmartEventType.SITE_UPDATE] = event[OneSmartFieldName.DATA]
                         elif event[OneSmartFieldName.EVENT] == OneSmartEventType.PRESET_PERFORM:
