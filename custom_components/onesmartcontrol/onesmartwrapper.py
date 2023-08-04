@@ -548,7 +548,7 @@ class OneSmartWrapper():
                             entity = dict()
                             entity[CONF_PLATFORM] = platform_name
                             entity[ONESMART_CACHE] = (OneSmartCommand.APPARATUS,OneSmartAction.GET)
-                            entity[ATTR_NAME] = device_name
+                            entity[ATTR_NAME] = None
                             entity[CONF_DEVICE_ID] = device_id
                             entity[OneSmartUpdateTopic] = OneSmartUpdateTopic.APPARATUS
                             entity = entity | entity_template
@@ -573,7 +573,7 @@ class OneSmartWrapper():
                     entity[ONESMART_CACHE] = (OneSmartCommand.APPARATUS,OneSmartAction.GET)
                     entity[ONESMART_KEY] = f"{device_id}.{attribute_name}"
                     entity[CONF_DEVICE_ID] = device_id
-                    entity[ATTR_NAME] = f"{device_name} {attribute_name.replace('_',' ').title()}"
+                    entity[ATTR_NAME] = f"{attribute_name.replace('_',' ').title()}"
                     entity[OneSmartUpdateTopic] = OneSmartUpdateTopic.APPARATUS
                     use_entity = False
 
