@@ -217,8 +217,8 @@ class OneSmartWrapper():
 
     """Runner for the POLL channel"""
     async def run_poll(self) -> None:
-        await self.hass.async_block_till_done()
         socket_name = SOCKET_POLL
+        _LOGGER.info(f"Socket {socket_name}: Starting event loop")
 
         # Loop through received data, blocked by socket.read
         while self.hass.state == CoreState.not_running or self.hass.is_running:
@@ -253,9 +253,8 @@ class OneSmartWrapper():
 
     """Runner for the PUSH channel"""
     async def run_push(self) -> None:
-        await self.hass.async_block_till_done()
-
         socket_name = SOCKET_PUSH
+        _LOGGER.info(f"Socket {socket_name}: Starting event loop")
 
         while self.hass.state == CoreState.not_running or self.hass.is_running:
             await self.ensure_connected_socket(socket_name)

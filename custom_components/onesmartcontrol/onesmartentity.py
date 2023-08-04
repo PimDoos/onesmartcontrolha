@@ -1,9 +1,6 @@
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity, DeviceInfo
-from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceEntryType
-from homeassistant.const import ATTR_IDENTIFIERS, ATTR_DEFAULT_NAME, ATTR_SW_VERSION, ATTR_VIA_DEVICE, ATTR_NAME, ATTR_MODEL, ATTR_SUGGESTED_AREA, ATTR_MANUFACTURER
-
 from .onesmartwrapper import OneSmartWrapper
 from .const import *
 
@@ -32,6 +29,7 @@ class OneSmartEntity(Entity):
             self._device: dict = devices.get(device_id)
             room_id = self._device.get(OneSmartFieldName.ROOM, None)
             self._room: dict = rooms.get(room_id, None)
+            url = None
 
             identifiers = {(DOMAIN, self._device_id)}
             device_name = self._device.get(OneSmartFieldName.NAME, None)
@@ -46,9 +44,10 @@ class OneSmartEntity(Entity):
             device_name = self._site.get(OneSmartFieldName.NAME, None)
             model = DEVICE_MODEL
             room_name = None
+            url = "https://portal.onesmartcontrol.com"
 
         self._attr_device_info = DeviceInfo(
-            configuration_url="https://portal.onesmartcontrol.com",
+            configuration_url=url,
             connections = None,
             entry_type = None,
             hw_version = None,
