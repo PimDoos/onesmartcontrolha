@@ -6,7 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 
 from homeassistant.const import (
     ATTR_DEVICE_CLASS, ATTR_NAME, Platform, CONF_DEVICE_ID,
-    ATTR_TEMPERATURE, TEMP_CELSIUS,
+    ATTR_TEMPERATURE, UnitOfTemperature
     
 )
 from homeassistant.components.climate import (
@@ -95,7 +95,7 @@ class OneSmartClimate(OneSmartEntity, ClimateEntity):
         self._hvac_actions = hvac_actions
         self._attr_supported_features = features
 
-        self._attr_temperature_unit = TEMP_CELSIUS
+        self._attr_temperature_unit = UnitOfTemperature.CELSIUS
 
 
     @property
