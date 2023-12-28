@@ -5,9 +5,8 @@ from homeassistant.config_entries import ConfigEntry
 
 
 from homeassistant.const import (
-    ATTR_IDENTIFIERS, ATTR_DEFAULT_NAME, ATTR_SW_VERSION, ATTR_VIA_DEVICE,
     ATTR_DEVICE_CLASS, ATTR_NAME, Platform, CONF_DEVICE_ID,
-    SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_ON, ATTR_TEMPERATURE, TEMP_CELSIUS,
+    SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_ON, ATTR_TEMPERATURE, UnitOfTemperature
     
 )
 from homeassistant.components.water_heater import (
@@ -95,7 +94,7 @@ class OneSmartWaterHeater(OneSmartEntity, WaterHeaterEntity):
 
     @property
     def temperature_unit(self):
-        return TEMP_CELSIUS
+        return UnitOfTemperature.CELSIUS
 
     async def async_set_operation_mode(self, operation_mode: str):
         mode_value = self._operation_commands[operation_mode]
