@@ -604,7 +604,7 @@ class OneSmartWrapper():
                                 use_entity = True
                             
                             elif "flow_rate_4graph" in attribute_name:
-                                entity[ATTR_UNIT_OF_MEASUREMENT] = f"{UnitOfVolume.LITER}/{UnitOfTime.MINUTE}"
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = f"{UnitOfVolume.LITERS}/{UnitOfTime.MINUTES}"
                                 use_entity = True
                               
                             elif "_power" in attribute_name:
