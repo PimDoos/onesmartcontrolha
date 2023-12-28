@@ -12,14 +12,15 @@ from homeassistant.const import (
     EVENT_HOMEASSISTANT_STARTED,
     Platform, ATTR_UNIT_OF_MEASUREMENT, ATTR_DEVICE_CLASS, CONF_PLATFORM,
     PERCENTAGE,
+    UnitOfTemperature,
+    UnitOfElectricPotential,
+    UnitOfElectricCurrent,
+    UnitOfEnergy,
+    UnitOfFrequency,
+    UnitOfVolume,
+    UnitOfTime,
+    UnitOfPower,
     CONCENTRATION_PARTS_PER_MILLION,
-    TEMP_CELSIUS,
-    POWER_WATT,
-    ELECTRIC_POTENTIAL_VOLT,
-    ELECTRIC_CURRENT_AMPERE,
-    FREQUENCY_HERTZ,
-    ENERGY_KILO_WATT_HOUR, ENERGY_WATT_HOUR,
-    VOLUME_LITERS, TIME_MINUTES,
     CONF_ATTRIBUTE,
     SERVICE_TURN_ON, SERVICE_TURN_OFF,
     CONF_DEVICE_ID, ATTR_NAME,
@@ -585,7 +586,7 @@ class OneSmartWrapper():
                             
                             # Temperature sensors
                             if "_temp" in attribute_name:
-                                entity[ATTR_UNIT_OF_MEASUREMENT] = TEMP_CELSIUS
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = UnitOfTemperature.CELSIUS
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.TEMPERATURE
                                 use_entity = True
 
@@ -603,11 +604,11 @@ class OneSmartWrapper():
                                 use_entity = True
                             
                             elif "flow_rate_4graph" in attribute_name:
-                                entity[ATTR_UNIT_OF_MEASUREMENT] = f"{VOLUME_LITERS}/{TIME_MINUTES}"
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = f"{UnitOfVolume.LITER}/{UnitOfTime.MINUTE}"
                                 use_entity = True
                               
                             elif "_power" in attribute_name:
-                                entity[ATTR_UNIT_OF_MEASUREMENT] = POWER_WATT
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = UnitOfPower.WATT
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.POWER
                                 if "reactive" in attribute_name:
                                     entity[ATTR_UNIT_OF_MEASUREMENT] = None
@@ -616,34 +617,34 @@ class OneSmartWrapper():
                                 use_entity = True
 
                             elif "current" in attribute_name:
-                                entity[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_CURRENT_AMPERE
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = UnitOfElectricCurrent.AMPERE
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.CURRENT
                                 use_entity = True
                             
                             elif "voltage" in attribute_name:
-                                entity[ATTR_UNIT_OF_MEASUREMENT] = ELECTRIC_POTENTIAL_VOLT
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = UnitOfElectricPotential.VOLT
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.VOLTAGE
                                 use_entity = True
                             
                             elif "frequency" in attribute_name:
-                                entity[ATTR_UNIT_OF_MEASUREMENT] = FREQUENCY_HERTZ
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = UnitOfFrequency.HERTZ
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.FREQUENCY
                                 use_entity = True
 
                             elif "e_total" == attribute_name:
-                                entity[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = UnitOfEnergy.KILO_WATT_HOUR
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
                                 entity[ATTR_STATE_CLASS] = SensorStateClass.TOTAL
                                 use_entity = True
 
                             elif "e_day" == attribute_name:
-                                entity[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_KILO_WATT_HOUR
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = UnitOfEnergy.KILO_WATT_HOUR
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
                                 entity[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
                                 use_entity = True
                             
                             elif "_energy_" in attribute_name and device[OneSmartFieldName.TYPE] == "ENERGY_PROCON_ATW":
-                                entity[ATTR_UNIT_OF_MEASUREMENT] = ENERGY_WATT_HOUR
+                                entity[ATTR_UNIT_OF_MEASUREMENT] = UnitOfEnergy.WATT_HOUR
                                 entity[ATTR_DEVICE_CLASS] = SensorDeviceClass.ENERGY
                                 entity[ATTR_STATE_CLASS] = SensorStateClass.TOTAL_INCREASING
                                 use_entity = True
