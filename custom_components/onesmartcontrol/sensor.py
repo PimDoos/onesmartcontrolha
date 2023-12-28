@@ -4,14 +4,15 @@ from homeassistant.config_entries import ConfigEntry
 
 
 from homeassistant.const import (
-    POWER_WATT, 
-    ENERGY_WATT_HOUR,
     ATTR_UNIT_OF_MEASUREMENT, ATTR_DEVICE_CLASS, ATTR_NAME, CONF_PLATFORM, Platform, CONF_DEVICE_ID
 )
 from homeassistant.components.sensor import (
     SensorDeviceClass, SensorStateClass,
     ATTR_STATE_CLASS,
     SensorEntity
+)
+from homeassistant.components.sensor.const import (
+    UnitOfPower, UnitOfEnergy
 )
 from homeassistant.core import HomeAssistant
 
@@ -41,7 +42,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
                 name=meter[OneSmartFieldName.NAME],
                 suffix="power",
                 source=OneSmartEventType.ENERGY_CONSUMPTION,
-                unit=POWER_WATT,
+                unit=UnitOfPower.WATT,
                 device_class=SensorDeviceClass.POWER,
                 state_class=SensorStateClass.MEASUREMENT
             )
@@ -57,7 +58,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
                 name=meter[OneSmartFieldName.NAME],
                 suffix="energy",
                 source=(OneSmartCommand.ENERGY,OneSmartAction.TOTAL),
-                unit=ENERGY_WATT_HOUR,
+                unit=UnitOfEnergy.WATT_HOUR,
                 device_class=SensorDeviceClass.ENERGY,
                 state_class=SensorStateClass.TOTAL
             )
