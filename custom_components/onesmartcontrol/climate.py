@@ -37,6 +37,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         for optional_attribute in optional_attributes:
             if not optional_attribute in wrapper_entity:
                 wrapper_entity[optional_attribute] = None
+        
+        features = ClimateEntityFeature.TARGET_TEMPERATURE
+        if HVACMode.OFF in wrapper_entity[ATTR_HVAC_MODES]:
+            features |= ClimateEntityFeature.TURN_OFF
+        if HVACMode.AUTO in wrapper_entity[ATTR_HVAC_MODES]:
+            features |= ClimateEntityFeature.TURN_ON
+        
 
         entities.append(
             OneSmartClimate(
@@ -53,7 +60,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
                 device_id=wrapper_entity[CONF_DEVICE_ID],
                 hvac_commands = wrapper_entity[ATTR_HVAC_MODES],
                 hvac_actions = wrapper_entity[ATTR_HVAC_ACTION],
-                features = ClimateEntityFeature.TARGET_TEMPERATURE
+                features = features
             )
         )
 
@@ -94,6 +101,7 @@ class OneSmartClimate(OneSmartEntity, ClimateEntity):
 
         self._hvac_actions = hvac_actions
         self._attr_supported_features = features
+        self._enable_turn_on_off_backwards_compatibility = False
 
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
 
