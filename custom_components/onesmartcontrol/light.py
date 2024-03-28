@@ -9,7 +9,7 @@ from homeassistant.const import (
     SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_OFF
 )
 from homeassistant.components.light import (
-    LightEntity, LightEntityDescription, ColorMode, ATTR_BRIGHTNESS, ATTR_SUPPORTED_COLOR_MODES
+    LightEntity, LightEntityDescription, ColorMode, ATTR_BRIGHTNESS, ATTR_SUPPORTED_COLOR_MODES, ATTR_COLOR_MODE
 )
 from homeassistant.core import HomeAssistant
 
@@ -80,10 +80,10 @@ class OneSmartLight(OneSmartEntity, LightEntity):
         
         if color_modes == None:
             self._attr_supported_color_modes = [ColorMode.ONOFF]
+            self._attr_color_mode = ColorMode.ONOFF
         else:
-            self._attr_supported_color_modes = color_modes
-
-        
+            self._attr_supported_color_modes = color_modes       
+            self._attr_color_mode = color_modes[0]
 
         self._command_on = command_on
         self._command_off = command_off

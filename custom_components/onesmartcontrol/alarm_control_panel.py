@@ -6,6 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 
 from homeassistant.const import (
     STATE_ALARM_DISARMED,
+    STATE_ALARM_ARMED_HOME,
     STATE_ALARM_ARMED_AWAY,
     STATE_ALARM_ARMED_NIGHT
 )
@@ -84,13 +85,13 @@ class OneSmartAlarmPanel(OneSmartEntity, AlarmControlPanelEntity):
 
     @property
     def supported_features(self) -> AlarmControlPanelEntityFeature:
-        return AlarmControlPanelEntityFeature.ARM_AWAY | AlarmControlPanelEntityFeature.ARM_NIGHT
+        return AlarmControlPanelEntityFeature.ARM_HOME | AlarmControlPanelEntityFeature.ARM_AWAY | AlarmControlPanelEntityFeature.ARM_NIGHT
 
     @property
     def state(self):
         onesmartvalue = self.get_cache_value(self._key)
         if onesmartvalue == OneSmartDefaultSitePreset.HOME:
-            return STATE_ALARM_DISARMED
+            return STATE_ALARM_ARMED_HOME
         if onesmartvalue == OneSmartDefaultSitePreset.AWAY:
             return STATE_ALARM_ARMED_AWAY
         if onesmartvalue == OneSmartDefaultSitePreset.ASLEEP:
