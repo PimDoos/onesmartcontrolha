@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 from homeassistant.config_entries import ConfigEntry
 
+from homeassistant.components.alarm_control_panel import AlarmControlPanelState
+
 from homeassistant.components.alarm_control_panel import (
-    AlarmControlPanelEntity, AlarmControlPanelEntityFeature, AlarmControlPanelState
+    AlarmControlPanelEntity, AlarmControlPanelEntityFeature
 )
 from homeassistant.core import HomeAssistant
 
@@ -81,12 +83,12 @@ class OneSmartAlarmPanel(OneSmartEntity, AlarmControlPanelEntity):
         return AlarmControlPanelEntityFeature.ARM_AWAY | AlarmControlPanelEntityFeature.ARM_NIGHT
 
     @property
-    def alarm_state(self):
+    def state(self):
         onesmartvalue = self.get_cache_value(self._key)
         if onesmartvalue == OneSmartDefaultSitePreset.HOME:
             return AlarmControlPanelState.DISARMED
         if onesmartvalue == OneSmartDefaultSitePreset.AWAY:
-            return AlarmControlPanelState.ARMED_AWAY
+            return AlarmControlPanelState.AWAY
         if onesmartvalue == OneSmartDefaultSitePreset.ASLEEP:
             return AlarmControlPanelState.ARMED_NIGHT
         return None
