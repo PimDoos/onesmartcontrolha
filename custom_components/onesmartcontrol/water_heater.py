@@ -10,7 +10,7 @@ from homeassistant.const import (
     
 )
 from homeassistant.components.water_heater import (
-    WaterHeaterEntity, WaterHeaterEntityEntityDescription, WaterHeaterEntityFeature,
+    WaterHeaterEntity, WaterHeaterEntityDescription, WaterHeaterEntityFeature,
     ATTR_OPERATION_LIST, ATTR_OPERATION_MODE, STATE_OFF
 )
 from homeassistant.core import HomeAssistant
