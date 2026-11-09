@@ -48,9 +48,6 @@ class OneSmartEntity(Entity):
 
         self._attr_device_info = DeviceInfo(
             configuration_url=url,
-            connections = None,
-            entry_type = None,
-            hw_version = None,
             identifiers = identifiers,
             manufacturer = DEVICE_MANUFACTURER,
             model = model,
